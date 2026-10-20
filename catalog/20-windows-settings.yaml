@@ -1,0 +1,337 @@
+section: Windows settings
+
+items:
+  # Taskbar
+  - id: taskbar-align-left
+    name: Align the taskbar to the left
+    category: Taskbar
+    restart: explorer
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+        name: TaskbarAl
+        value: 0
+
+  - id: taskbar-hide-search
+    name: Hide search on the taskbar
+    category: Taskbar
+    restart: explorer
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Search
+        name: SearchboxTaskbarMode
+        value: 0
+
+  - id: taskbar-hide-buttons
+    name: Hide the Task view and Widgets buttons
+    category: Taskbar
+    restart: explorer
+    detect: |
+      $adv = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+      $policy = (Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -ErrorAction SilentlyContinue).AllowNewsAndInterests
+      $adv.ShowTaskViewButton -eq 0 -and ($adv.TaskbarDa -eq 0 -or $policy -eq 0)
+    apply: |
+      $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+      Set-ItemProperty $adv -Name ShowTaskViewButton -Value 0 -Type DWord
+      try {
+          Set-ItemProperty $adv -Name TaskbarDa -Value 0 -Type DWord
+      } catch {
+          # Newer builds protect TaskbarDa from scripts; turning Widgets off by policy hides the button too.
+          Write-Output "TaskbarDa is protected ($($_.Exception.Message)); using the Widgets policy instead."
+          New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -Force | Out-Null
+          Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -Name AllowNewsAndInterests -Value 0 -Type DWord
+      }
+
+  - id: taskbar-hide-tray-icons
+    name: Move all tray icons into the overflow menu
+    description: Includes OneDrive. Run it again later to catch icons from newly installed apps.
+    category: Taskbar
+    # Runs after the installs, since new apps add their own tray icons.
+    order: 85
+    # Explorer keeps this setting itself, so writing the registry doesn't stick. Instead this checks what the
+    # taskbar actually shows: app icons are tagged NotifyItemIcon; Network, Volume, and the clock aren't.
+    detect: |
+      Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+      $A = [System.Windows.Automation.AutomationElement]
+      $taskbar = $A::RootElement.FindFirst('Children', (New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, 'Shell_TrayWnd')))
+      if (-not $taskbar) { return $false }
+      $taskbar.FindAll('Descendants', (New-Object System.Windows.Automation.PropertyCondition($A::AutomationIdProperty, 'NotifyItemIcon'))).Count -eq 0
+    # Flips each app's switch off on the Settings page, the switch Windows actually honors, through the same
+    # accessibility interface screen readers use. If Settings changes and this breaks, the check above says so.
+    apply: |
+      Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+      $A = [System.Windows.Automation.AutomationElement]
+      $toggle = [System.Windows.Automation.TogglePattern]::Pattern
+      $expand = [System.Windows.Automation.ExpandCollapsePattern]::Pattern
+      function Find-All($el) { $el.FindAll('Descendants', [System.Windows.Automation.Condition]::TrueCondition) }
+
+      Start-Process explorer.exe 'ms-settings:taskbar'
+      # Settings is an ApplicationFrameWindow; only search those (searching every window's contents is slow).
+      $frames = New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, 'ApplicationFrameWindow')
+      $window = $null
+      $switches = @()
+      $deadline = (Get-Date).AddSeconds(30)
+      while ($switches.Count -eq 0 -and (Get-Date) -lt $deadline) {
+          Start-Sleep -Milliseconds 700
+          foreach ($w in $A::RootElement.FindAll('Children', $frames)) {
+              # Expand collapsed sections so every tray switch is on the page.
+              foreach ($b in (Find-All $w | Where-Object { $_.Current.AutomationId -eq 'EntityItemButton' })) {
+                  $p = $null
+                  if ($b.TryGetCurrentPattern($expand, [ref]$p) -and $p.Current.ExpandCollapseState -eq 'Collapsed') {
+                      $p.Expand(); Start-Sleep -Milliseconds 300
+                  }
+              }
+              $switches = @(Find-All $w | Where-Object { $_.Current.AutomationId -like 'SystemSettings_DesktopTaskbar_SystemTrayAppListItem*_ToggleSwitch' })
+              if ($switches.Count -gt 0) { $window = $w; break }
+          }
+      }
+      if ($switches.Count -eq 0) { throw "Couldn't find the tray icon switches in Taskbar settings." }
+      foreach ($s in $switches) {
+          $p = $s.GetCurrentPattern($toggle)
+          if ($p.Current.ToggleState -eq 'On') {
+              $p.Toggle()
+              Write-Output "Hid $($s.Current.Name)"
+          }
+      }
+
+      Start-Sleep -Seconds 2
+      $window.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
+
+  - id: taskbar-multi-display
+    name: "Multiple displays: show apps on the main taskbar and where the window is open"
+    category: Taskbar
+    restart: explorer
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+        name: MMTaskbarMode
+        value: 1
+
+  - id: taskbar-seconds
+    name: Show seconds in the clock
+    category: Taskbar
+    restart: explorer
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+        name: ShowSecondsInSystemClock
+        value: 1
+
+  - id: taskbar-unpin-all
+    name: Unpin all taskbar apps
+    description: Removes every pin, including Edge and the Store. Pin what you want afterward.
+    category: Taskbar
+    restart: explorer
+    once: true
+    detect: |
+      -not (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband' -Name Favorites -ErrorAction SilentlyContinue) -and
+      -not (Get-ChildItem "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar" -Filter *.lnk -ErrorAction SilentlyContinue)
+    apply: |
+      Remove-Item "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*" -Force -ErrorAction SilentlyContinue
+      Remove-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband' -Recurse -Force -ErrorAction SilentlyContinue
+
+  # Personalization
+  - id: theme-dark-light-apps
+    name: Dark theme with light app mode
+    description: Dark taskbar and Start menu, light apps.
+    category: Personalization
+    restart: explorer
+    detect: |
+      $p = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+      $p.SystemUsesLightTheme -eq 0 -and $p.AppsUseLightTheme -eq 1
+    apply: |
+      Start-Process "$env:WINDIR\Resources\Themes\dark.theme"
+      Start-Sleep -Seconds 5
+      Get-Process SystemSettings -ErrorAction SilentlyContinue | Stop-Process -Force
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+      Set-ItemProperty $p -Name SystemUsesLightTheme -Value 0 -Type DWord
+      Set-ItemProperty $p -Name AppsUseLightTheme -Value 1 -Type DWord
+
+  # File Explorer
+  - id: explorer-compact
+    name: Compact view
+    category: File Explorer
+    restart: explorer
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+        name: UseCompactMode
+        value: 1
+
+  - id: explorer-extensions
+    name: Show file extensions
+    category: File Explorer
+    restart: explorer
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+        name: HideFileExt
+        value: 0
+
+  - id: explorer-this-pc
+    name: Open new windows to This PC
+    category: File Explorer
+    # Win+E and the taskbar use a saved copy of this setting that only Folder Options updates (writing the
+    # LaunchTo registry value alone isn't enough), so this sets it through Folder Options. There's no reliable
+    # way to read that saved copy back, so it's a one-time item instead of having a check.
+    once: true
+    apply: |
+      Add-Type -Namespace Win32 -Name Dlg -MemberDefinition @'
+      [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+      [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr hWnd);
+      '@
+      Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+      $A = [System.Windows.Automation.AutomationElement]
+      $byId = { param($id) New-Object System.Windows.Automation.PropertyCondition($A::AutomationIdProperty, $id) }
+
+      Start-Process rundll32.exe 'shell32.dll,Options_RunDLL 0'
+      $combo = $null
+      $deadline = (Get-Date).AddSeconds(20)
+      while (-not $combo -and (Get-Date) -lt $deadline) {
+          Start-Sleep -Milliseconds 500
+          $dialogs = $A::RootElement.FindAll('Children', (New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, '#32770')))
+          foreach ($d in $dialogs) {
+              $c = $d.FindFirst('Descendants', (& $byId '30108'))   # "Open File Explorer to" dropdown
+              if ($c) { $combo = $c; $dialog = $d; break }
+          }
+      }
+      if (-not $combo) { throw "Folder Options didn't open in time." }
+
+      # Second entry is This PC (after Home / Quick access). Select it, tell the page it changed, then press OK.
+      $h = [IntPtr]$combo.Current.NativeWindowHandle
+      [Win32.Dlg]::SendMessage($h, 0x014E, [IntPtr]1, [IntPtr]::Zero) | Out-Null                  # CB_SETCURSEL
+      [Win32.Dlg]::SendMessage([Win32.Dlg]::GetParent($h), 0x0111, [IntPtr]((1 -shl 16) -bor 30108), $h) | Out-Null   # WM_COMMAND, CBN_SELCHANGE
+      $ok = $dialog.FindFirst('Children', (& $byId '1'))
+      if (-not $ok) { throw "Couldn't find OK in Folder Options." }
+      [Win32.Dlg]::SendMessage([IntPtr]$ok.Current.NativeWindowHandle, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null   # BM_CLICK
+      Write-Output "Set Folder Options to open File Explorer to This PC"
+
+  - id: explorer-no-checkboxes
+    name: Turn off item checkboxes
+    category: File Explorer
+    restart: explorer
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+        name: AutoCheckSelect
+        value: 0
+
+  - id: inline-autocomplete
+    name: Inline autocomplete in File Explorer and Run
+    category: File Explorer
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoComplete
+        name: Append Completion
+        type: String
+        value: "yes"
+
+  # System
+  - id: animations-off
+    name: Turn off animation effects
+    category: System
+    restart: explorer
+    detect: |
+      Add-Type -Namespace Win32 -Name Spi -MemberDefinition '[DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] public static extern bool Get(uint action, uint param, ref bool value, uint flags);'
+      $on = $true
+      [Win32.Spi]::Get(0x1042, 0, [ref]$on, 0) | Out-Null   # SPI_GETCLIENTAREAANIMATION
+      -not $on
+    apply: |
+      Add-Type -Namespace Win32 -Name Spi -MemberDefinition '[DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] public static extern bool Set(uint action, uint param, IntPtr value, uint flags);'
+      [Win32.Spi]::Set(0x1043, 0, [IntPtr]::Zero, 3) | Out-Null   # SPI_SETCLIENTAREAANIMATION off, save and broadcast
+      Set-ItemProperty 'HKCU:\Control Panel\Desktop\WindowMetrics' -Name MinAnimate -Value '0'
+      Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name TaskbarAnimations -Value 0 -Type DWord
+
+  - id: snap-bar-off
+    name: Turn off the snap layouts hint when dragging a window to the top
+    category: System
+    restart: explorer
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+        name: EnableSnapBar
+        value: 0
+
+  - id: screen-timeout-never
+    name: Never turn off the screen
+    category: System
+    detect: |
+      powercfg /query SCHEME_CURRENT SUB_VIDEO VIDEOIDLE | Select-String 'Current AC Power Setting Index: 0x00000000'
+    apply: |
+      powercfg /change monitor-timeout-ac 0
+      powercfg /change monitor-timeout-dc 0
+
+  - id: notifications-dnd-calendar
+    name: Turn off Do not disturb and expand the calendar
+    category: System
+    instructions: In Settings, turn off Do not disturb and its automatic rules. Then open the notification center and expand the calendar.
+    open: ms-settings:notifications
+
+  - id: delete-desktop-shortcuts
+    name: Delete desktop shortcuts
+    description: Clears the desktop once everything else is installed.
+    category: System
+    order: 90
+    once: true
+    detect: |
+      -not (Get-ChildItem ([Environment]::GetFolderPath('Desktop')), ([Environment]::GetFolderPath('CommonDesktopDirectory')) -Filter *.lnk -ErrorAction SilentlyContinue)
+    apply: |
+      Get-ChildItem ([Environment]::GetFolderPath('Desktop')), ([Environment]::GetFolderPath('CommonDesktopDirectory')) -Filter *.lnk -ErrorAction SilentlyContinue |
+          Remove-Item -Force
+
+  - id: driver-updates-off
+    name: Stop Windows Update from installing drivers
+    description: Only if a video driver update causes problems.
+    category: System
+    registry:
+      - path: HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate
+        name: ExcludeWUDriversInQualityUpdate
+        value: 1
+
+  # Security
+  - id: uac-no-prompts
+    name: Approve admin prompts automatically
+    description: No more prompts, while keeping UAC on so Store apps still work.
+    category: Security
+    registry:
+      - path: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+        name: ConsentPromptBehaviorAdmin
+        value: 0
+
+  - id: uac-off
+    name: Turn UAC off completely
+    description: No prompts at all, but some Store apps won't open. Needs a restart.
+    category: Security
+    restart: reboot
+    order: 95
+    registry:
+      - path: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+        name: ConsentPromptBehaviorAdmin
+        value: 0
+      - path: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+        name: EnableInstallerDetection
+        value: 0
+      - path: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+        name: EnableLUA
+        value: 0
+      - path: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+        name: EnableSecureUIAPaths
+        value: 0
+
+  # Network
+  - id: remote-access
+    name: Allow remote access
+    description: Remote Desktop, ping, file sharing, and PowerShell remoting. The network needs to be set to Private.
+    category: Network
+    detect: |
+      (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server').fDenyTSConnections -eq 0 -and
+      (Get-Service WinRM).Status -eq 'Running'
+    apply: |
+      Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
+      Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+      Enable-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv4-In)'
+      Enable-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv6-In)'
+      Enable-NetFirewallRule -DisplayGroup 'File and Printer Sharing'
+      winrm quickconfig -force
+      Enable-NetFirewallRule -DisplayGroup 'Windows Remote Management'
+
+  - id: static-ip
+    name: Set a static IP address
+    description: Only if this machine needs one.
+    category: Network
+    instructions: Open the adapter's properties, then Internet Protocol Version 4, and enter the address.
+    open: ncpa.cpl
+    detect: |
+      Get-NetIPInterface -AddressFamily IPv4 -ConnectionState Connected |
+          Where-Object { $_.Dhcp -eq 'Disabled' -and $_.InterfaceAlias -notlike 'Loopback*' -and $_.InterfaceAlias -notlike 'vEthernet*' }

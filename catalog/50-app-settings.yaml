@@ -1,0 +1,67 @@
+section: App settings
+
+# Most of these are manual for now. Turn them into scripts (or add a detect) as the exact settings get written down.
+items:
+  - id: vscode-sign-in
+    name: "VS Code: sign in and set up AI"
+    category: VS Code
+    dependsOn: [vscode]
+    instructions: Sign in to sync settings, then install the AI extensions.
+
+  - id: firefox-hide-bookmarks-bar
+    name: "Firefox: hide the bookmarks bar"
+    description: Firefox will say it's managed by your organization.
+    category: Firefox
+    registry:
+      - path: HKLM\SOFTWARE\Policies\Mozilla\Firefox
+        name: DisplayBookmarksToolbar
+        type: String
+        value: never
+
+  - id: firefox-settings
+    name: "Firefox: adjust the UI and apply settings"
+    category: Firefox
+    dependsOn: [firefox]
+    instructions: Set up the toolbar and settings the way you like them.
+
+  - id: keepassxc-settings
+    name: "KeePassXC: settings and browser integration"
+    category: KeePassXC
+    dependsOn: [keepassxc]
+    instructions: Turn on browser integration for Firefox and Edge, and install the KeePassXC-Browser extension in both.
+    # Ticks off once browser integration is on for both browsers.
+    detect: |
+      $ini = "$env:APPDATA\KeePassXC\keepassxc.ini", "$env:LOCALAPPDATA\KeePassXC\keepassxc.ini" | Where-Object { Test-Path $_ }
+      $text = ($ini | ForEach-Object { Get-Content $_ -Raw }) -join "`n"
+      $browser = [regex]::Match($text, '(?ms)^\[Browser\]\s*$(.*?)(^\[|\z)').Groups[1].Value
+      $browser -match '(?m)^Enabled=true' -and $browser -match '(?m)^Firefox=true' -and $browser -match '(?m)^Edge=true'
+
+  - id: everything-settings
+    name: "Everything: apply settings"
+    category: Desktop apps
+    dependsOn: [everything]
+    instructions: Set up its options the way you like them.
+
+  - id: start11-groupy-settings
+    name: "Start11 and Groupy: license and settings"
+    category: Desktop apps
+    dependsOn: [start11, groupy]
+    instructions: Enter the licenses, then set them up the way you like them.
+
+  - id: powertoys-remaps
+    name: "PowerToys: Alt+F4 and Print Screen remaps"
+    category: Desktop apps
+    dependsOn: [powertoys]
+    instructions: Set up the Alt+F4 and Print Screen shortcuts in Keyboard Manager.
+    # Ticks off once Keyboard Manager has any remaps. Tighten this once the exact remaps are written down.
+    detect: |
+      $f = "$env:LOCALAPPDATA\Microsoft\PowerToys\Keyboard Manager\default.json"
+      if (-not (Test-Path $f)) { return $false }
+      $km = Get-Content $f -Raw | ConvertFrom-Json
+      (($km.remapShortcuts.global | Measure-Object).Count + ($km.remapKeys.inProcess | Measure-Object).Count) -gt 0
+
+  - id: onenote-setup
+    name: "OneNote: open notebooks and set the layout"
+    category: Desktop apps
+    dependsOn: [onenote]
+    instructions: Open your notebooks, set View > Tabs Layout to horizontal, and pin the ribbon open.

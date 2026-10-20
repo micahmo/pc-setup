@@ -1,0 +1,8 @@
+bin/
+obj/
+publish/
+.vs/
+*.user
+
+# Private presets (work info, keys) never go in this public repo.
+private/

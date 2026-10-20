@@ -1,0 +1,60 @@
+section: Apps
+
+# Every app installs silently with winget. Add one with just an id, name, category, and winget id.
+items:
+  # Browsers and productivity
+  - { id: firefox, name: Firefox, category: Browsers and productivity, winget: Mozilla.Firefox }
+  - id: onenote
+    name: OneNote
+    description: The full desktop app.
+    category: Browsers and productivity
+    winget: XPFFZHVGQWWLHB
+    source: msstore
+    detect: |
+      (Test-Path "$env:ProgramFiles\Microsoft Office\root\Office16\ONENOTE.EXE") -or
+      (Test-Path "${env:ProgramFiles(x86)}\Microsoft Office\root\Office16\ONENOTE.EXE")
+  - { id: obsidian, name: Obsidian, category: Browsers and productivity, winget: Obsidian.Obsidian }
+  - { id: everything, name: Everything, category: Browsers and productivity, winget: voidtools.Everything }
+  - { id: ditto, name: Ditto, category: Browsers and productivity, winget: Ditto.Ditto }
+  - { id: freetube, name: FreeTube, category: Browsers and productivity, winget: FreeTube.FreeTube }
+
+  # Passwords
+  - { id: keepassxc, name: KeePassXC, category: Passwords, winget: KeePassXCTeam.KeePassXC }
+
+  # Desktop
+  - { id: start11, name: Start11, description: Needs its license entered after install., category: Desktop, winget: Stardock.Start11.v2 }
+  - { id: groupy, name: Groupy 2, description: Needs its license entered after install., category: Desktop, winget: Stardock.Groupy.v2 }
+  - { id: powertoys, name: PowerToys, category: Desktop, winget: Microsoft.PowerToys }
+  - { id: windhawk, name: Windhawk, category: Desktop, winget: RamenSoftware.Windhawk }
+  - { id: msedgeredirect, name: MSEdgeRedirect, category: Desktop, winget: rcmaehl.MSEdgeRedirect }
+
+  # Utilities
+  - { id: system-informer, name: System Informer, category: Utilities, winget: WinsiderSS.SystemInformer }
+  - { id: sharex, name: ShareX, category: Utilities, winget: ShareX.ShareX }
+  - { id: nanazip, name: NanaZip, category: Utilities, winget: M2Team.NanaZip }
+  - { id: rapidee, name: Rapid Environment Editor, category: Utilities, winget: OlegDanilov.RapidEnvironmentEditor }
+  - { id: lockhunter, name: LockHunter, category: Utilities, winget: CrystalRich.LockHunter }
+  - { id: devtoys, name: DevToys, category: Utilities, winget: DevToys-app.DevToys }
+  - { id: notepadplusplus, name: Notepad++, category: Utilities, winget: Notepad++.Notepad++ }
+  - { id: klogg, name: klogg, category: Utilities, winget: variar.klogg }
+  - { id: scrcpy-gui, name: Scrcpy GUI, description: Mirror and control your Android phone., category: Utilities, winget: pizi.scrcpygui }
+
+  # Networking and sync
+  - { id: tailscale, name: Tailscale, description: Set this up before Syncthing., category: Networking and sync, winget: Tailscale.Tailscale }
+  - { id: syncthing, name: Syncthing, category: Networking and sync, winget: Syncthing.Syncthing, dependsOn: [tailscale] }
+  - { id: syncthing-tray, name: Syncthing Tray, description: Runs Syncthing at sign-in and adds a tray icon., category: Networking and sync, winget: Martchus.syncthingtray, dependsOn: [syncthing] }
+
+  # Development
+  - id: vscode
+    name: Visual Studio Code
+    description: Installed for all users, so it can update itself.
+    category: Development
+    winget: Microsoft.VisualStudioCode
+    scope: machine
+  - { id: git, name: Git, category: Development, winget: Git.Git }
+  - { id: windows-terminal, name: Windows Terminal, category: Development, winget: Microsoft.WindowsTerminal }
+  - { id: gh, name: GitHub CLI, category: Development, winget: GitHub.cli }
+  - { id: kubectl, name: kubectl, category: Development, winget: Kubernetes.kubectl }
+  - { id: azure-cli, name: Azure CLI, category: Development, winget: Microsoft.AzureCLI }
+  - { id: copilot-cli, name: Copilot CLI, category: Development, winget: GitHub.Copilot }
+  - { id: chocolatey, name: Chocolatey, category: Development, winget: Chocolatey.Chocolatey }

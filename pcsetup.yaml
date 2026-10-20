@@ -1,0 +1,11 @@
+# Wizard step order. Sections not listed here come after these, in the order they're found.
+sectionOrder:
+  - Before you start
+  - Windows settings
+  - Apps
+  - Terminal and shell
+  - App settings
+
+# Extra folders searched for preset files (*.yaml). Leave private locations out of this public file:
+# folders you load presets from are remembered per PC in %LOCALAPPDATA%\PCSetup\settings.yaml instead.
+presetFolders: []

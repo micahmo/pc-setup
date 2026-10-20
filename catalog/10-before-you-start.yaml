@@ -1,0 +1,12 @@
+section: Before you start
+category: Do these first
+
+items:
+  - id: join-domain
+    name: Join a domain
+    description: Settings are saved per account, so join first, restart, and sign in with the account you'll actually use.
+    instructions: >-
+      Select Open, then Change… to rename the PC and join the domain. Windows asks for the credentials.
+      Restart, sign in with your domain account, and run PC Setup again.
+    open: SystemPropertiesComputerName.exe
+    detect: (Get-CimInstance Win32_ComputerSystem).PartOfDomain

@@ -1,0 +1,71 @@
+section: Terminal and shell
+category: PowerShell
+
+items:
+  - id: windows-terminal-update
+    name: Update Windows Terminal
+    description: Close any open Terminal windows first.
+    category: Windows Terminal
+    dependsOn: [windows-terminal]
+    detect: |
+      -not ((winget upgrade --accept-source-agreements --disable-interactivity) -match 'Microsoft\.WindowsTerminal\s')
+    apply: |
+      winget upgrade --id Microsoft.WindowsTerminal -e --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
+
+  - id: terminal-settings-link
+    name: Use your synced Terminal settings
+    description: The current settings are backed up first.
+    category: Windows Terminal
+    dependsOn: [windows-terminal, syncthing]
+    requires:
+      test: Test-Path "$env:USERPROFILE\Syncthing\PowerShell\settings.json"
+      hint: Wait for Syncthing to sync the PowerShell folder, then retry.
+    detect: |
+      $s = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+      (Get-Item $s -ErrorAction SilentlyContinue).LinkType -eq 'SymbolicLink'
+    apply: |
+      $s = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+      New-Item -ItemType Directory -Path (Split-Path $s) -Force | Out-Null
+      if (Test-Path $s) { Copy-Item $s "$s.bak" -Force }
+      Remove-Item $s -Force -ErrorAction SilentlyContinue
+      New-Item -ItemType SymbolicLink -Path $s -Target "$env:USERPROFILE\Syncthing\PowerShell\settings.json" | Out-Null
+
+  - id: powershell-profile-link
+    name: Use your synced PowerShell profile
+    description: The current profile is backed up first.
+    dependsOn: [syncthing]
+    requires:
+      test: Test-Path "$env:USERPROFILE\Syncthing\PowerShell\Microsoft.PowerShell_profile.ps1"
+      hint: Wait for Syncthing to sync the PowerShell folder, then retry.
+    detect: |
+      $p = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Microsoft.PowerShell_profile.ps1'
+      (Get-Item $p -ErrorAction SilentlyContinue).LinkType -eq 'SymbolicLink'
+    apply: |
+      $p = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Microsoft.PowerShell_profile.ps1'
+      New-Item -ItemType Directory -Path (Split-Path $p) -Force | Out-Null
+      if (Test-Path $p) { Copy-Item $p "$p.bak" -Force }
+      Remove-Item $p -Force -ErrorAction SilentlyContinue
+      New-Item -ItemType SymbolicLink -Path $p -Target "$env:USERPROFILE\Syncthing\PowerShell\Microsoft.PowerShell_profile.ps1" | Out-Null
+
+  - id: powershell-execution-policy
+    name: Let PowerShell run your own scripts
+    registry:
+      - path: HKCU\Software\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell
+        name: ExecutionPolicy
+        type: String
+        value: RemoteSigned
+
+  - id: powershell-modules
+    name: Install PowerShell modules
+    description: posh-git, Terminal-Icons, and the latest PSReadLine.
+    detect: |
+      (Get-Module -ListAvailable posh-git) -and (Get-Module -ListAvailable Terminal-Icons) -and
+      ((Get-Module -ListAvailable PSReadLine | Sort-Object Version -Descending | Select-Object -First 1).Version -ge [version]'2.3')
+    apply: |
+      [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+      if (-not (Get-PackageProvider -ListAvailable -Name NuGet -ErrorAction SilentlyContinue | Where-Object Version -ge '2.8.5.201')) {
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
+      }
+      Install-Module posh-git -Scope CurrentUser -Force
+      Install-Module Terminal-Icons -Scope CurrentUser -Force
+      Install-Module PSReadLine -Scope CurrentUser -Force -AllowClobber -SkipPublisherCheck

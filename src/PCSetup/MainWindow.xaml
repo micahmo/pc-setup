@@ -1,0 +1,408 @@
+<Window x:Class="PCSetup.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:PCSetup.ViewModels"
+        xmlns:local="clr-namespace:PCSetup"
+        Title="PC Setup" Icon="Assets/app.ico" Width="1000" Height="720" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <!-- One catalog item on a section page -->
+        <DataTemplate x:Key="ItemRow" DataType="{x:Type vm:ItemViewModel}">
+            <Grid Margin="0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="36" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <CheckBox IsChecked="{Binding IsSelected}" IsEnabled="{Binding CanToggle}" VerticalAlignment="Center" MinWidth="0"
+                          Visibility="{Binding ShowCheckbox, Converter={StaticResource BoolToVisible}}"
+                          AutomationProperties.Name="{Binding Name}" />
+                <TextBlock Style="{StaticResource StatusIcon}" Tag="success" Text="&#xE73E;" Margin="4,0,0,0"
+                           Visibility="{Binding IsDone, Converter={StaticResource BoolToVisible}}" />
+                <TextBlock Style="{StaticResource StatusIcon}" Text="&#xE70F;" Margin="4,0,0,0" ToolTip="Something you do yourself"
+                           Visibility="{Binding CanMarkDone, Converter={StaticResource BoolToVisible}}" />
+                <!-- Clicking the text (or the space beside it) toggles the box. Transparent background makes the gaps clickable. -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" ToolTip="{Binding Details}" Background="Transparent">
+                    <StackPanel.InputBindings>
+                        <MouseBinding Gesture="LeftClick" Command="{Binding ToggleCommand}" />
+                    </StackPanel.InputBindings>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CanToggle}" Value="True">
+                                    <Setter Property="Cursor" Value="Hand" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Caption}"
+                               Visibility="{Binding Subtitle, Converter={StaticResource NullToCollapsed}}" />
+                    <TextBlock Text="{Binding Instructions}" Style="{StaticResource Caption}" Margin="0,2,0,0"
+                               Visibility="{Binding Instructions, Converter={StaticResource NullToCollapsed}}" />
+                </StackPanel>
+                <Border Grid.Column="2" Style="{StaticResource Pill}" Tag="{Binding BadgeKind}" Margin="8,0,0,0"
+                        ToolTip="{Binding BadgeTooltip}"
+                        Visibility="{Binding Badge, Converter={StaticResource NullToCollapsed}}">
+                    <TextBlock Text="{Binding Badge}" />
+                </Border>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Open" Margin="8,0,0,0" Padding="10,3" FontSize="12"
+                            Command="{Binding OpenCommand}"
+                            Visibility="{Binding HasOpen, Converter={StaticResource BoolToVisible}}" />
+                    <Button Content="Mark done" Margin="8,0,0,0" Padding="10,3" FontSize="12"
+                            ToolTip="Done, or not needed on this PC. Remembered on this PC."
+                            Command="{Binding MarkDoneCommand}"
+                            Visibility="{Binding CanMarkDone, Converter={StaticResource BoolToVisible}}" />
+                    <Button Content="Undo" Margin="8,0,0,0" Padding="10,3" FontSize="12"
+                            ToolTip="Put this step back on the to-do list"
+                            Command="{Binding UndoMarkDoneCommand}"
+                            Visibility="{Binding IsMarkedDone, Converter={StaticResource BoolToVisible}}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Start -->
+        <DataTemplate DataType="{x:Type vm:StartPageViewModel}">
+            <ScrollViewer Focusable="False" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="32,28,32,16" MaxWidth="820" HorizontalAlignment="Left">
+                    <TextBlock Text="Set up this PC" Style="{StaticResource PageTitle}" />
+                    <TextBlock Style="{StaticResource Secondary}"
+                               Text="Pick any presets, then step through each section and choose what you want. Anything already done is detected and skipped, so you can run this as many times as you like." />
+
+                    <Border Style="{StaticResource Card}" Margin="0,16,0,0" Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                            Visibility="{Binding Main.WingetMissing, Converter={StaticResource BoolToVisible}}">
+                        <TextBlock TextWrapping="Wrap" Text="winget isn't available yet, so apps can't be installed or checked. Update App Installer from the Microsoft Store, then select Rescan." />
+                    </Border>
+
+                    <TextBlock Text="Presets" Style="{StaticResource GroupHeader}" Margin="2,24,0,6" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="2,0,0,8"
+                               Text="Presets add their own items and change what's selected by default. Turn on as many as you need." />
+                    <ItemsControl ItemsSource="{Binding Main.Presets}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:PresetOption}">
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                                    <CheckBox IsChecked="{Binding IsActive}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Secondary}"
+                                                       Visibility="{Binding Description, Converter={StaticResource NullToCollapsed}}" />
+                                            <TextBlock Text="{Binding FilePath}" Style="{StaticResource Caption}" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Style="{StaticResource Secondary}" Margin="2,0,0,8"
+                               Visibility="{Binding Main.Presets.Count, Converter={StaticResource ZeroToVisible}}"
+                               Text="No presets loaded yet. Use Load preset file once on each PC, and that folder is checked automatically after that." />
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <Button Content="Load preset file…" Command="{Binding Main.LoadPresetCommand}" />
+                        <Button Content="Rescan" Margin="8,0,0,0" Command="{Binding Main.RescanCommand}" />
+                    </StackPanel>
+
+                    <TextBlock Text="This PC" Style="{StaticResource GroupHeader}" Margin="2,24,0,6" />
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Main.ScanSummary}" />
+                            <ProgressBar IsIndeterminate="True" Height="4" Margin="0,8,0,0"
+                                         Visibility="{Binding Main.IsScanning, Converter={StaticResource BoolToVisible}}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </DataTemplate>
+
+        <!-- A catalog section -->
+        <DataTemplate DataType="{x:Type vm:SectionPageViewModel}">
+            <Grid Margin="32,28,32,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}" />
+                        <TextBlock Text="{Binding Summary}" Style="{StaticResource Secondary}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <Button Content="Select all" Command="{Binding SelectAllCommand}" />
+                        <Button Content="Select none" Margin="8,0,0,0" Command="{Binding SelectNoneCommand}" />
+                    </StackPanel>
+                </Grid>
+                <Grid Grid.Row="1" Margin="0,14,0,0" Visibility="{Binding ShowSearch, Converter={StaticResource BoolToVisible}}">
+                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="34,6,10,6"
+                             AutomationProperties.Name="{Binding SearchHint}" />
+                    <!-- Placeholder: a search icon, plus hint text until something is typed -->
+                    <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="14"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="{Binding SearchHint}" Margin="10,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                   Visibility="{Binding SearchText, Converter={StaticResource EmptyToVisible}}" />
+                    </StackPanel>
+                </Grid>
+                <ScrollViewer Focusable="False" Grid.Row="2" Margin="0,4,0,0" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Groups}" Margin="0,0,20,16">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:CategoryGroup}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource GroupHeader}" />
+                                    <Border Style="{StaticResource Card}">
+                                        <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource ItemRow}" />
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Review -->
+        <DataTemplate DataType="{x:Type vm:ReviewPageViewModel}">
+            <ScrollViewer Focusable="False" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="32,28,32,16">
+                    <TextBlock Text="Review" Style="{StaticResource PageTitle}" />
+                    <TextBlock Text="Here's what will run." Style="{StaticResource Secondary}" />
+
+                    <UniformGrid Columns="2" Margin="0,16,0,0">
+                        <Border Style="{StaticResource Card}" Margin="0,0,6,0">
+                            <StackPanel>
+                                <TextBlock Text="To apply" Style="{StaticResource Caption}" />
+                                <TextBlock Text="{Binding ApplyCount}" FontSize="22" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="6,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Restart needed" Style="{StaticResource Caption}" />
+                                <TextBlock Text="{Binding RestartText}" FontSize="22" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <Border Style="{StaticResource Card}" Margin="0,16,0,0" Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                            Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVisible}}">
+                        <ItemsControl ItemsSource="{Binding Warnings}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource Secondary}" Margin="0,16,0,0"
+                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisible}}"
+                               Text="Nothing is selected that isn't already done." />
+
+                    <ItemsControl ItemsSource="{Binding Groups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ReviewGroup}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Section}" Style="{StaticResource GroupHeader}" />
+                                    <Border Style="{StaticResource Card}">
+                                        <ItemsControl ItemsSource="{Binding Items}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:ItemViewModel}">
+                                                    <TextBlock Text="{Binding Name}" Margin="0,3" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                        <CheckBox Content="Create a restore point first" IsChecked="{Binding CreateRestorePoint}" />
+                        <Button Content="Save selections as preset…" Margin="24,0,0,0" Command="{Binding SavePresetCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </DataTemplate>
+
+        <!-- Run -->
+        <DataTemplate DataType="{x:Type vm:RunPageViewModel}">
+            <Grid Margin="32,28,32,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Run" Style="{StaticResource PageTitle}" />
+                    <TextBlock Text="{Binding Status}" Style="{StaticResource Secondary}" />
+                </StackPanel>
+                <StackPanel Grid.Row="1" Margin="0,12,0,0">
+                    <ProgressBar Value="{Binding Progress}" Height="6" Maximum="100" />
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Run setup" Style="{DynamicResource AccentButtonStyle}" Command="{Binding StartCommand}"
+                                Visibility="{Binding CanStart, Converter={StaticResource BoolToVisible}}" />
+                        <Button Content="Cancel" Command="{Binding CancelCommand}"
+                                Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisible}}" />
+                        <Button Content="Restart now" Style="{DynamicResource AccentButtonStyle}" Command="{Binding RebootCommand}" Margin="0,0,8,0"
+                                Visibility="{Binding NeedsReboot, Converter={StaticResource BoolToVisible}}" />
+                        <Button Content="Sign out now" Command="{Binding SignOutCommand}"
+                                Visibility="{Binding NeedsSignOut, Converter={StaticResource BoolToVisible}}" />
+                    </StackPanel>
+                </StackPanel>
+                <ScrollViewer Focusable="False" Grid.Row="2" Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding RunItems}" Margin="0,0,20,8">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ItemViewModel}">
+                                <Border BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1" Padding="0,8"
+                                        local:Behaviors.BringIntoViewWhen="{Binding IsRunningNow}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="32" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource StatusIcon}" Tag="{Binding RunKind}" Text="{Binding RunGlyph}" />
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding RunMessage}" Style="{StaticResource Caption}" />
+                                            <TextBlock Text="{Binding Instructions}" Style="{StaticResource Caption}" Margin="0,2,0,0"
+                                                       Visibility="{Binding Instructions, Converter={StaticResource NullToCollapsed}}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Content="Open" Padding="10,3" FontSize="12" Command="{Binding OpenCommand}"
+                                                    Visibility="{Binding HasOpen, Converter={StaticResource BoolToVisible}}" />
+                                            <Button Content="Mark done" Padding="10,3" FontSize="12" Margin="8,0,0,0"
+                                                    ToolTip="Done, or not needed on this PC. Remembered on this PC."
+                                                    Command="{Binding MarkDoneCommand}"
+                                                    Visibility="{Binding CanMarkDone, Converter={StaticResource BoolToVisible}}" />
+                                            <Button Content="Retry" Padding="10,3" FontSize="12" Margin="8,0,0,0"
+                                                    Command="{Binding DataContext.RetryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Visibility="{Binding CanRetry, Converter={StaticResource BoolToVisible}}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <Expander Grid.Row="3" Header="Log" Margin="0,8,0,8">
+                    <StackPanel>
+                        <ListBox ItemsSource="{Binding LogLines}" Height="200" local:Behaviors.FollowNewest="True" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                                 VirtualizingPanel.IsVirtualizing="True" />
+                        <TextBlock Text="{Binding LogFile}" Style="{StaticResource Caption}" Margin="0,6,0,0" />
+                    </StackPanel>
+                </Expander>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="210" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Step rail -->
+        <Grid Background="{DynamicResource LayerFillColorDefaultBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <StackPanel Orientation="Horizontal" Margin="18,20,0,14">
+                <TextBlock Style="{StaticResource Icon}" Text="&#xE770;" FontSize="18" Margin="0,0,10,0" />
+                <TextBlock Text="PC Setup" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+            </StackPanel>
+            <ListBox Grid.Row="1" ItemsSource="{Binding Pages}" SelectedItem="{Binding CurrentPage}"
+                     IsEnabled="{Binding CanNavigate}"
+                     Background="Transparent" BorderThickness="0" Margin="6,0">
+                <!-- Rounded items with an accent pill on the selected step, like Windows 11 Settings -->
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Margin" Value="0,1" />
+                        <Setter Property="Padding" Value="10,6" />
+                        <Setter Property="Cursor" Value="Hand" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Bg" CornerRadius="6" Background="Transparent" Padding="{TemplateBinding Padding}">
+                                        <Grid>
+                                            <Border x:Name="Pill" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left"
+                                                    Margin="-10,0,0,0" Background="{DynamicResource AccentFillColorDefaultBrush}" Visibility="Collapsed" />
+                                            <ContentPresenter />
+                                        </Grid>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                            <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:PageViewModel}">
+                        <StackPanel Orientation="Horizontal" Margin="2,4">
+                            <TextBlock Style="{StaticResource Icon}" Text="{Binding Glyph}" Margin="0,0,12,0" />
+                            <TextBlock Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <StackPanel Grid.Row="2" Margin="14,0,14,14">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <RadioButton Style="{StaticResource ThemeSegment}" Content="&#xE706;" ToolTip="Light mode"
+                                 AutomationProperties.Name="Light mode"
+                                 IsChecked="{Binding IsDarkMode, Converter={StaticResource Not}}" />
+                    <RadioButton Style="{StaticResource ThemeSegment}" Content="&#xE708;" ToolTip="Dark mode" Margin="4,0,0,0"
+                                 AutomationProperties.Name="Dark mode"
+                                 IsChecked="{Binding IsDarkMode}" />
+                </StackPanel>
+                <Button Content="Open log folder" HorizontalAlignment="Stretch" Command="{Binding OpenLogFolderCommand}" />
+                <TextBlock Text="{Binding Version, StringFormat=Version {0}}" Style="{StaticResource Caption}" Margin="4,8,0,0" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Margin="24,16,24,0" Style="{StaticResource Card}" Background="{DynamicResource SystemFillColorCriticalBackgroundBrush}"
+                    Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}">
+                <Grid>
+                    <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Margin="0,0,80,0" VerticalAlignment="Center" />
+                    <Button Content="Dismiss" HorizontalAlignment="Right" Command="{Binding DismissErrorCommand}" />
+                </Grid>
+            </Border>
+
+            <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" Focusable="False" />
+
+            <Border Grid.Row="2" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="24,12">
+                <Grid>
+                    <TextBlock Text="{Binding CurrentPage.Title}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Back" MinWidth="90" Command="{Binding BackCommand}"
+                                Visibility="{Binding CanGoBack, Converter={StaticResource BoolToVisible}}" />
+                        <Button Content="{Binding NextLabel}" MinWidth="110" Margin="8,0,0,0" Style="{DynamicResource AccentButtonStyle}"
+                                Command="{Binding NextCommand}"
+                                Visibility="{Binding ShowNext, Converter={StaticResource BoolToVisible}}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
