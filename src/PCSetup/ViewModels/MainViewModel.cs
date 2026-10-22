@@ -341,5 +341,24 @@ public sealed partial class MainViewModel : ObservableObject
                 .Select(d => $"{i.Name} needs {d!.Name}, which isn't selected."))
             .Concat(todo.Where(i => i.Scan == ScanState.NotReady)
                 .Select(i => $"{i.Name}: {i.Item.Requires?.Hint ?? "not ready yet"}"))
+            .Concat(FollowUpWarnings(Items, todo))
             .ToList();
+
+    /// <summary>
+    /// Apps being installed without the settings that go with them (items that depend on the app), which are easy
+    /// to forget since they're on a later page. Other installs that depend on an app, like add-ons, don't count.
+    /// </summary>
+    public static IEnumerable<string> FollowUpWarnings(IEnumerable<ItemViewModel> items, List<ItemViewModel> todo)
+    {
+        var installs = todo.Where(i => i.Item.Kind == ItemKind.Winget).ToList();
+        foreach (var followUp in items.Where(f => f.Item.Kind != ItemKind.Winget && !f.IsDone && !todo.Contains(f)))
+        {
+            var apps = installs.Where(a => followUp.Item.DependsOn.Contains(a.Item.Id, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (apps.Count == 0) continue;
+            var names = string.Join(" and ", apps.Select(a => a.Name));
+            yield return followUp.IsManual
+                ? $"{names} will be installed. Afterward, remember “{followUp.Name}” on the {followUp.Section} page."
+                : $"{names} will be installed, but “{followUp.Name}” isn't selected.";
+        }
+    }
 }

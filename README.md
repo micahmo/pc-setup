@@ -78,7 +78,7 @@ Any desktop shortcut an install creates is removed right after it, on your deskt
 Other fields, on any item:
 
 - `description`: a line under the name.
-- `dependsOn: [id, ...]`: runs after those items, and waits if they aren't done.
+- `dependsOn: [id, ...]`: runs after those items, and waits if they aren't done. A settings item that depends on an app also gets a reminder on the Review page when you install the app without selecting it (or, for a manual step, without having done it).
 - `requires: { test: <PowerShell>, hint: <text> }`: a precondition checked right before applying, such as a synced folder existing. If it fails, the item shows as "Not ready" with the hint and a Retry button.
 - `order`: lower runs first (default 50). Cleanup like deleting desktop shortcuts uses 90 so it follows the installs.
 - `once: true`: a fresh-PC step, like unpinning everything. After it runs, or you select **Mark done**, it stays done on that PC ("Done before") even if its check would fail later, for example when you pin an app on purpose. **Undo** makes it runnable again.
