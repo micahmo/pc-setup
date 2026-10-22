@@ -5,7 +5,7 @@ items:
   - id: vscode-sign-in
     name: "VS Code: turn on Settings Sync"
     description: Brings back your extensions, settings, and keyboard shortcuts.
-    category: VS Code
+    category: Development
     dependsOn: [vscode]
     instructions: In VS Code, select the account icon at the bottom left, then Backup and Sync Settings, and sign in with your Microsoft account. Then sign in to any extensions that need it.
     # Ticks off once Settings Sync is on. VS Code keeps that in its own SQLite database, read here with the
@@ -36,20 +36,10 @@ items:
       '@
       [PcsVsCodeState]::Get($db, 'sync.enable') -eq 'true'
 
-  - id: firefox-hide-bookmarks-bar
-    name: "Firefox: hide the bookmarks bar"
-    description: Firefox will say it's managed by your organization.
-    category: Firefox
-    registry:
-      - path: HKLM\SOFTWARE\Policies\Mozilla\Firefox
-        name: DisplayBookmarksToolbar
-        type: String
-        value: never
-
   - id: firefox-settings
     name: "Firefox: apply settings"
-    description: Reopens your tabs, Backspace goes back, strict tracking protection, a bare new tab page, a home button, Google Images search, uBlock Origin, and more. Takes effect the next time Firefox starts.
-    category: Firefox
+    description: Reopens your tabs, Backspace goes back, strict tracking protection, a bare new tab page, a home button, no bookmarks bar, Google Images search, uBlock Origin, and more. Firefox will say it's managed by your organization. Takes effect the next time Firefox starts.
+    category: Browsers and productivity
     dependsOn: [firefox]
     # Firefox policies for most of it. The preferences are defaults, not locks, so they can still be changed in
     # Firefox, and a signed-in Firefox account syncs its own values over them. The one preference policies can't
@@ -86,6 +76,7 @@ items:
       $want = @(
           @{ Key = $ff; Name = 'Preferences'; Value = ($p | ConvertTo-Json -Depth 5 -Compress) }
           @{ Key = $ff; Name = 'ShowHomeButton'; Value = 1 }
+          @{ Key = $ff; Name = 'DisplayBookmarksToolbar'; Value = 'never' }
           @{ Key = $ff; Name = 'ExtensionSettings'; Value = '{"uBlock0@raymondhill.net":{"installation_mode":"normal_installed","install_url":"https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"}}' }
           @{ Key = "$ff\SearchEngines\Add\1"; Name = 'Name'; Value = 'Google Images' }
           @{ Key = "$ff\SearchEngines\Add\1"; Name = 'URLTemplate'; Value = 'https://images.google.com/images?hl=en&source=hp&q={searchTerms}&btnG=Search+Images&gbv=2' }
@@ -131,6 +122,7 @@ items:
       New-Item $ff -Force | Out-Null
       Set-ItemProperty $ff -Name Preferences -Value @($p | ConvertTo-Json -Depth 5 -Compress) -Type MultiString
       Set-ItemProperty $ff -Name ShowHomeButton -Value 1 -Type DWord
+      Set-ItemProperty $ff -Name DisplayBookmarksToolbar -Value 'never' -Type String
       Set-ItemProperty $ff -Name ExtensionSettings -Type MultiString -Value @('{"uBlock0@raymondhill.net":{"installation_mode":"normal_installed","install_url":"https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"}}')
 
       # Search: add Google Images, hide every built-in engine but Google. Remove is rewritten whole.
@@ -156,7 +148,7 @@ items:
 
   - id: keepassxc-settings
     name: "KeePassXC: settings and browser integration"
-    category: KeePassXC
+    category: Passwords
     dependsOn: [keepassxc]
     instructions: Turn on browser integration for Firefox and Edge, and install the KeePassXC-Browser extension in both.
     # Ticks off once browser integration is on for both browsers.
@@ -169,7 +161,7 @@ items:
   - id: everything-settings
     name: "Everything: apply settings"
     description: Starts with Windows, checks for updates, keeps search and run history, and sorts by newest first. Restarts Everything.
-    category: Desktop apps
+    category: Browsers and productivity
     dependsOn: [everything]
     # Everything keeps its settings in Everything.ini, in AppData unless the copy next to the exe says otherwise.
     # Only these keys are checked and written. Same values as the apply below.
@@ -245,7 +237,7 @@ items:
   - id: ditto-settings
     name: "Ditto: apply settings"
     description: Keeps up to 500 copies and skips the message at startup.
-    category: Desktop apps
+    category: Browsers and productivity
     dependsOn: [ditto]
     # Ditto reads these from the registry when it needs them, so no restart. Everything else in your notes is
     # Ditto's default, and its installer already adds it to startup.
@@ -263,7 +255,7 @@ items:
   - id: sharex-settings
     name: "ShareX: apply settings"
     description: Light theme, Print Screen captures a region, a quick menu after each capture, no sounds, and more. Restarts ShareX.
-    category: Desktop apps
+    category: Utilities
     dependsOn: [sharex]
     # ShareX keeps its settings in JSON next to the screenshots. Only these values are checked and written;
     # everything else in the files is left alone. A missing file gets just these values, and ShareX fills in
@@ -394,14 +386,14 @@ items:
 
   - id: start11-groupy-settings
     name: "Start11 and Groupy: license and settings"
-    category: Desktop apps
+    category: Desktop
     dependsOn: [start11, groupy]
     instructions: Enter the licenses, then set them up the way you like them.
 
   - id: powertoys-settings
     name: "PowerToys: only Keyboard Manager, with F4 and Insert remapped"
     description: F4 acts as Alt+F4 and Insert as Print Screen. Every other PowerToys tool is turned off. Restarts PowerToys.
-    category: Desktop apps
+    category: Desktop
     dependsOn: [powertoys]
     # settings.json lists which tools are on; Keyboard Manager's remaps are in its default.json. Key codes are
     # Windows virtual keys: 115 = F4, 164 = Left Alt, 45 = Insert, 44 = Print Screen. Same values as the apply below.
@@ -492,6 +484,6 @@ items:
 
   - id: onenote-setup
     name: "OneNote: open notebooks and set the layout"
-    category: Desktop apps
+    category: Browsers and productivity
     dependsOn: [onenote]
     instructions: Open your notebooks, set View > Tabs Layout to horizontal, and pin the ribbon open.
