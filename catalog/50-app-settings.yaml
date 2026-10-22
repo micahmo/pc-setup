@@ -38,7 +38,7 @@ items:
 
   - id: firefox-settings
     name: "Firefox: apply settings"
-    description: Reopens your tabs, Backspace goes back, strict tracking protection, a bare new tab page, a home button, no bookmarks bar, Google Images search, uBlock Origin, and more. Firefox will say it's managed by your organization. Takes effect the next time Firefox starts.
+    description: Reopens your tabs, Backspace goes back, a bare new tab page, a home button, no bookmarks bar, Google Images search, uBlock Origin, and more. Firefox will say it's managed by your organization. Takes effect the next time Firefox starts.
     category: Browsers and productivity
     dependsOn: [firefox]
     # Firefox policies for most of it. The preferences are defaults, not locks, so they can still be changed in
@@ -59,7 +59,6 @@ items:
           'browser.backspace_action'                                     = 0        # Backspace goes back
           'browser.urlbar.autoFill.adaptiveHistory.enabled'              = $true    # autofill from history, like Chrome
           'browser.formfill.enable'                                      = $false   # don't remember search and form history
-          'browser.contentblocking.category'                             = 'strict'
           'signon.rememberSignons'                                       = $false   # no password saving; KeePassXC does that
           'signon.generation.enabled'                                    = $false
           'signon.management.page.breach-alerts.enabled'                 = $false
@@ -111,7 +110,6 @@ items:
           'browser.backspace_action'                                     = 0
           'browser.urlbar.autoFill.adaptiveHistory.enabled'              = $true
           'browser.formfill.enable'                                      = $false
-          'browser.contentblocking.category'                             = 'strict'
           'signon.rememberSignons'                                       = $false
           'signon.generation.enabled'                                    = $false
           'signon.management.page.breach-alerts.enabled'                 = $false
