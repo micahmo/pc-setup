@@ -20,6 +20,15 @@ items:
         name: SearchboxTaskbarMode
         value: 0
 
+  - id: start-search-no-web
+    name: No Bing or web results in Start search
+    category: Taskbar
+    restart: signout
+    registry:
+      - path: HKCU\Software\Microsoft\Windows\CurrentVersion\Search
+        name: BingSearchEnabled
+        value: 0
+
   - id: taskbar-hide-buttons
     name: Hide the Task view and Widgets buttons
     category: Taskbar
@@ -36,7 +45,7 @@ items:
       } catch {
           # Newer builds protect TaskbarDa from scripts; turning Widgets off by policy hides the button too.
           Write-Output "TaskbarDa is protected ($($_.Exception.Message)); using the Widgets policy instead."
-          New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -Force | Out-Null
+          if (-not (Test-Path 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh')) { New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -Force | Out-Null }
           Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -Name AllowNewsAndInterests -Value 0 -Type DWord
       }
 
@@ -220,19 +229,49 @@ items:
 
   # System
   - id: animations-off
-    name: Turn off animation effects
+    name: Turn off fade, slide, and animation effects
+    description: The animations in Advanced system settings > Performance, plus Peek. Keeps the shadow under the mouse pointer.
     category: System
     restart: explorer
+    # The same calls the Performance Options dialog makes, so most changes apply right away; the taskbar and
+    # Peek ones need Explorer restarted. The dialog's other options (window shadows, thumbnails, smooth fonts...)
+    # are left alone. Same values as the apply below.
     detect: |
-      Add-Type -Namespace Win32 -Name Spi -MemberDefinition '[DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] public static extern bool Get(uint action, uint param, ref bool value, uint flags);'
-      $on = $true
-      [Win32.Spi]::Get(0x1042, 0, [ref]$on, 0) | Out-Null   # SPI_GETCLIENTAREAANIMATION
-      -not $on
+      Add-Type @'
+      using System; using System.Runtime.InteropServices;
+      public static class PcsSpi {
+          [StructLayout(LayoutKind.Sequential)] struct AnimationInfo { public uint cbSize; public int iMinAnimate; }
+          [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] static extern bool GetBool(uint action, uint param, ref int value, uint flags);
+          [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] static extern bool Anim(uint action, uint param, ref AnimationInfo value, uint flags);
+          public static bool Get(uint action) { int v = 0; GetBool(action, 0, ref v, 0); return v != 0; }
+          public static bool MinAnimate() { var a = new AnimationInfo { cbSize = 8 }; Anim(0x48, 8, ref a, 0); return a.iMinAnimate != 0; }
+      }
+      '@
+      $off = 0x1042, 0x1002, 0x1016, 0x1014, 0x1004, 0x1006   # inside windows, menus, tooltips, menu items fading, combo boxes, list boxes
+      $adv = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+      $dwm = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\DWM' -ErrorAction SilentlyContinue
+      -not ($off | Where-Object { [PcsSpi]::Get($_) }) -and -not [PcsSpi]::MinAnimate() -and [PcsSpi]::Get(0x101A) -and
+          $adv.TaskbarAnimations -eq 0 -and $dwm.EnableAeroPeek -eq 0
     apply: |
-      Add-Type -Namespace Win32 -Name Spi -MemberDefinition '[DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] public static extern bool Set(uint action, uint param, IntPtr value, uint flags);'
-      [Win32.Spi]::Set(0x1043, 0, [IntPtr]::Zero, 3) | Out-Null   # SPI_SETCLIENTAREAANIMATION off, save and broadcast
-      Set-ItemProperty 'HKCU:\Control Panel\Desktop\WindowMetrics' -Name MinAnimate -Value '0'
+      Add-Type @'
+      using System; using System.Runtime.InteropServices;
+      public static class PcsSpi {
+          [StructLayout(LayoutKind.Sequential)] struct AnimationInfo { public uint cbSize; public int iMinAnimate; }
+          [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] static extern bool SetBool(uint action, uint param, IntPtr value, uint flags);
+          [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")] static extern bool Anim(uint action, uint param, ref AnimationInfo value, uint flags);
+          // 3 = save to the profile and tell running apps.
+          public static void Set(uint action, bool on) { SetBool(action, 0, new IntPtr(on ? 1 : 0), 3); }
+          public static void MinAnimate(bool on) { var a = new AnimationInfo { cbSize = 8, iMinAnimate = on ? 1 : 0 }; Anim(0x49, 8, ref a, 3); }
+      }
+      '@
+      foreach ($a in 0x1043, 0x1003, 0x1017, 0x1015, 0x1005, 0x1007) { [PcsSpi]::Set($a, $false) }   # the same six, set
+      [PcsSpi]::MinAnimate($false)                                                                  # minimizing and maximizing
+      [PcsSpi]::Set(0x101B, $true)                                                                  # shadow under the mouse pointer
       Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name TaskbarAnimations -Value 0 -Type DWord
+      if (-not (Test-Path 'HKCU:\Software\Microsoft\Windows\DWM')) { New-Item 'HKCU:\Software\Microsoft\Windows\DWM' -Force | Out-Null }
+      Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\DWM' -Name EnableAeroPeek -Value 0 -Type DWord
+      # Shows "Custom" selected in the Performance Options dialog, as when you pick the options yourself.
+      Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name VisualFXSetting -Value 3 -Type DWord
 
   - id: snap-bar-off
     name: Turn off the snap layouts hint when dragging a window to the top
