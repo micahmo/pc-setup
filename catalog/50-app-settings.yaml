@@ -69,10 +69,14 @@ items:
       $ini = Join-Path $dir 'Everything.ini'
 
       # Everything writes its settings when it exits, so let it exit cleanly first. The indexing service keeps running.
+      # (-wait is 1.5 only; 1.4 answers unknown options with its help window.)
       if ($running.Count -gt 0) {
           Write-Output 'Closing Everything.'
-          & $exe -exit -wait
+          Start-Process $exe -ArgumentList '-exit' -Wait
           $running | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
+          if (Get-Process -Id $running.Id -ErrorAction SilentlyContinue) {
+              throw "Everything didn't close, so its settings weren't changed. Close it from its tray icon and try again."
+          }
       }
 
       $want = [ordered]@{
