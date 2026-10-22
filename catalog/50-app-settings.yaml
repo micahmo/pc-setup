@@ -71,20 +71,26 @@ items:
           'browser.newtabpage.activity-stream.widgets.sportsWidget.enabled' = $false
           'browser.newtabpage.activity-stream.widgets.stocks.enabled'    = $false
           'browser.uiCustomization.state'                                = $toolbar # home button, no flexible spaces
+          'browser.toolbarbuttons.introduced.sidebar-button'             = $true    # don't add the sidebar button
+          'browser.aboutwelcome.enabled'                                 = $false   # no welcome screen
       }
       $p = [ordered]@{}; foreach ($k in $prefs.Keys) { $p[$k] = [ordered]@{ Value = $prefs[$k]; Status = 'default' } }
       $want = @(
           @{ Key = $ff; Name = 'Preferences'; Value = ($p | ConvertTo-Json -Depth 5 -Compress) }
           @{ Key = $ff; Name = 'ShowHomeButton'; Value = 1 }
           @{ Key = $ff; Name = 'DisplayBookmarksToolbar'; Value = 'never' }
-          @{ Key = $ff; Name = 'ExtensionSettings'; Value = '{"uBlock0@raymondhill.net":{"installation_mode":"normal_installed","install_url":"https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"}}' }
+          @{ Key = $ff; Name = 'OverrideFirstRunPage'; Value = '' }
+          @{ Key = $ff; Name = 'OverridePostUpdatePage'; Value = '' }
+          @{ Key = $ff; Name = 'ExtensionSettings'; Value = '{"uBlock0@raymondhill.net":{"installation_mode":"normal_installed","default_area":"menupanel","install_url":"https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"}}' }
           @{ Key = "$ff\SearchEngines\Add\1"; Name = 'Name'; Value = 'Google Images' }
           @{ Key = "$ff\SearchEngines\Add\1"; Name = 'URLTemplate'; Value = 'https://images.google.com/images?hl=en&source=hp&q={searchTerms}&btnG=Search+Images&gbv=2' }
           @{ Key = "$ff\SearchEngines\Add\1"; Name = 'Alias'; Value = 'images' }
       )
       $i = 0; foreach ($n in 'Bing', 'DuckDuckGo', 'Perplexity', 'Wikipedia (en)', 'eBay', 'Amazon.com', 'Startpage') { $i++; $want += @{ Key = "$ff\SearchEngines\Remove"; Name = "$i"; Value = $n } }
       foreach ($w in $want) {
-          $v = (Get-ItemProperty $w.Key -Name $w.Name -ErrorAction SilentlyContinue).($w.Name)
+          $item = Get-ItemProperty $w.Key -ErrorAction SilentlyContinue
+          if (-not $item -or -not $item.PSObject.Properties[$w.Name]) { return $false }
+          $v = $item.($w.Name)
           if ((@($v) -join "`n") -ne "$($w.Value)") { return $false }
       }
       $cfg = Join-Path $exeDir 'pcsetup.cfg'
@@ -117,13 +123,18 @@ items:
           'browser.newtabpage.activity-stream.widgets.sportsWidget.enabled' = $false
           'browser.newtabpage.activity-stream.widgets.stocks.enabled'    = $false
           'browser.uiCustomization.state'                                = $toolbar
+          'browser.toolbarbuttons.introduced.sidebar-button'             = $true
+          'browser.aboutwelcome.enabled'                                 = $false
       }
       $p = [ordered]@{}; foreach ($k in $prefs.Keys) { $p[$k] = [ordered]@{ Value = $prefs[$k]; Status = 'default' } }
       New-Item $ff -Force | Out-Null
       Set-ItemProperty $ff -Name Preferences -Value @($p | ConvertTo-Json -Depth 5 -Compress) -Type MultiString
       Set-ItemProperty $ff -Name ShowHomeButton -Value 1 -Type DWord
       Set-ItemProperty $ff -Name DisplayBookmarksToolbar -Value 'never' -Type String
-      Set-ItemProperty $ff -Name ExtensionSettings -Type MultiString -Value @('{"uBlock0@raymondhill.net":{"installation_mode":"normal_installed","install_url":"https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"}}')
+      # No welcome or what's-new pages; an empty value means none.
+      Set-ItemProperty $ff -Name OverrideFirstRunPage -Value '' -Type String
+      Set-ItemProperty $ff -Name OverridePostUpdatePage -Value '' -Type String
+      Set-ItemProperty $ff -Name ExtensionSettings -Type MultiString -Value @('{"uBlock0@raymondhill.net":{"installation_mode":"normal_installed","default_area":"menupanel","install_url":"https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"}}')
 
       # Search: add Google Images, hide every built-in engine but Google. Remove is rewritten whole.
       $add = "$ff\SearchEngines\Add\1"
