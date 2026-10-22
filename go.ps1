@@ -14,7 +14,12 @@ $zip = Join-Path $env:TEMP 'PCSetup.zip'
 Write-Host 'Downloading PC Setup...'
 Invoke-WebRequest "https://github.com/$repo/releases/latest/download/PCSetup.zip" -OutFile $zip -UseBasicParsing
 
-Get-Process PCSetup -ErrorAction SilentlyContinue | Stop-Process -Force
+# PC Setup runs as admin, so this window usually can't close it; and closing it could cut off a run.
+# Wait for it to be closed instead.
+if (Get-Process PCSetup -ErrorAction SilentlyContinue) {
+    Write-Host 'PC Setup is already open. Close it to continue...'
+    while (Get-Process PCSetup -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }
+}
 if (Test-Path $app) { Remove-Item $app -Recurse -Force }
 Expand-Archive $zip $app -Force
 Remove-Item $zip -Force
