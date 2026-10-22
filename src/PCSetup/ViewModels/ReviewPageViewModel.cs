@@ -15,7 +15,8 @@ public sealed partial class ReviewPageViewModel(MainViewModel main) : PageViewMo
     [ObservableProperty] private List<string> _warnings = [];
     [ObservableProperty] private int _applyCount;
     [ObservableProperty] private string _restartText = "None";
-    [ObservableProperty] private bool _createRestorePoint = true;
+    // Off by default: most runs are a few small tweaks. Tick it on the Review page for bigger ones.
+    [ObservableProperty] private bool _createRestorePoint;
 
     public bool HasWarnings => Warnings.Count > 0;
     public bool IsEmpty => ApplyCount == 0;
