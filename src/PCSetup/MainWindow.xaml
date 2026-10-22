@@ -134,7 +134,7 @@
                         <Button Content="Select none" Margin="8,0,0,0" Command="{Binding SelectNoneCommand}" />
                     </StackPanel>
                 </Grid>
-                <Grid Grid.Row="1" Margin="0,14,0,0" Visibility="{Binding ShowSearch, Converter={StaticResource BoolToVisible}}">
+                <Grid Grid.Row="1" Margin="0,14,0,0">
                     <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Padding="34,6,10,6"
                              AutomationProperties.Name="{Binding SearchHint}" />
                     <!-- Placeholder: a search icon, plus hint text until something is typed -->
@@ -147,18 +147,22 @@
                     </StackPanel>
                 </Grid>
                 <ScrollViewer Focusable="False" Grid.Row="2" Margin="0,4,0,0" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding Groups}" Margin="0,0,20,16">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type vm:CategoryGroup}">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Name}" Style="{StaticResource GroupHeader}" />
-                                    <Border Style="{StaticResource Card}">
-                                        <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource ItemRow}" />
-                                    </Border>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <StackPanel>
+                        <TextBlock Text="{Binding NoMatchesText}" Style="{StaticResource Secondary}" Margin="0,16,0,0" TextWrapping="Wrap"
+                                   Visibility="{Binding HasNoMatches, Converter={StaticResource BoolToVisible}}" />
+                        <ItemsControl ItemsSource="{Binding Groups}" Margin="0,0,20,16">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:CategoryGroup}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource GroupHeader}" />
+                                        <Border Style="{StaticResource Card}">
+                                            <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource ItemRow}" />
+                                        </Border>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </ScrollViewer>
             </Grid>
         </DataTemplate>

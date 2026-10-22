@@ -327,6 +327,12 @@ public sealed partial class MainViewModel : ObservableObject
         if (n < Pages.Count - 1) CurrentPage = Pages[n + 1];
     }
 
+    /// <summary>Keeps the search the same on every step; setting a page's text to what it already has does nothing.</summary>
+    public void ShareSearch(string text)
+    {
+        foreach (var page in Pages.OfType<SectionPageViewModel>()) page.SearchText = text;
+    }
+
     public ItemViewModel? FindItem(string id) =>
         Items.FirstOrDefault(i => string.Equals(i.Item.Id, id, StringComparison.OrdinalIgnoreCase));
 

@@ -50,7 +50,9 @@ public sealed partial class SectionPageViewModel : PageViewModel
 
     public List<ItemViewModel> Items { get; }
     public ObservableCollection<CategoryGroup> Groups { get; } = [];
-    public bool ShowSearch => Items.Count > 12;
+
+    public bool HasNoMatches => Groups.Count == 0 && SearchText.Trim().Length > 0;
+    public string NoMatchesText => $"Nothing on this page matches “{SearchText.Trim()}”.";
 
     /// <summary>"Search apps", "Search Windows settings": sentence case, keeping proper nouns.</summary>
     public string SearchHint => Title.StartsWith("Windows", StringComparison.Ordinal)
@@ -69,7 +71,13 @@ public sealed partial class SectionPageViewModel : PageViewModel
         }
     }
 
-    partial void OnSearchTextChanged(string value) => Refresh();
+    // One search for every page, so setting up a single app (its install, then its settings) shows just that app
+    // as you go through the steps.
+    partial void OnSearchTextChanged(string value)
+    {
+        Refresh();
+        Main.ShareSearch(value);
+    }
 
     public override void OnShown() => OnPropertyChanged(nameof(Summary));
 
@@ -84,6 +92,8 @@ public sealed partial class SectionPageViewModel : PageViewModel
         foreach (var g in visible.GroupBy(i => i.Category))
             Groups.Add(new CategoryGroup(g.Key, g));
         OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(HasNoMatches));
+        OnPropertyChanged(nameof(NoMatchesText));
     }
 
     [CommunityToolkit.Mvvm.Input.RelayCommand]
