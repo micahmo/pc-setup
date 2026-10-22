@@ -3,10 +3,38 @@ section: App settings
 # Most of these are manual for now. Turn them into scripts (or add a detect) as the exact settings get written down.
 items:
   - id: vscode-sign-in
-    name: "VS Code: sign in and set up AI"
+    name: "VS Code: turn on Settings Sync"
+    description: Brings back your extensions, settings, and keyboard shortcuts.
     category: VS Code
     dependsOn: [vscode]
-    instructions: Sign in to sync settings, then install the AI extensions.
+    instructions: In VS Code, select the account icon at the bottom left, then Backup and Sync Settings, and sign in with your Microsoft account. Then sign in to any extensions that need it.
+    # Ticks off once Settings Sync is on. VS Code keeps that in its own SQLite database, read here with the
+    # SQLite that ships with Windows; read-only, so it's fine while VS Code is open.
+    detect: |
+      $db = Join-Path $env:APPDATA 'Code\User\globalStorage\state.vscdb'
+      if (-not (Test-Path $db)) { return $false }
+      Add-Type -Language CSharp @'
+      using System;
+      using System.Runtime.InteropServices;
+      public static class PcsVsCodeState {
+          [DllImport("winsqlite3.dll", CharSet = CharSet.Ansi)] static extern int sqlite3_open_v2(string file, out IntPtr db, int flags, IntPtr vfs);
+          [DllImport("winsqlite3.dll", CharSet = CharSet.Ansi)] static extern int sqlite3_prepare_v2(IntPtr db, string sql, int len, out IntPtr stmt, IntPtr tail);
+          [DllImport("winsqlite3.dll")] static extern int sqlite3_step(IntPtr stmt);
+          [DllImport("winsqlite3.dll")] static extern IntPtr sqlite3_column_text(IntPtr stmt, int col);
+          [DllImport("winsqlite3.dll")] static extern int sqlite3_finalize(IntPtr stmt);
+          [DllImport("winsqlite3.dll")] static extern int sqlite3_close(IntPtr db);
+          public static string Get(string file, string key) {
+              IntPtr db, stmt;
+              if (sqlite3_open_v2(file, out db, 1 /* read-only */, IntPtr.Zero) != 0) { sqlite3_close(db); return null; }
+              try {
+                  if (sqlite3_prepare_v2(db, "SELECT value FROM ItemTable WHERE key = '" + key.Replace("'", "''") + "'", -1, out stmt, IntPtr.Zero) != 0) return null;
+                  try { return sqlite3_step(stmt) == 100 /* row */ ? Marshal.PtrToStringAnsi(sqlite3_column_text(stmt, 0)) : null; }
+                  finally { sqlite3_finalize(stmt); }
+              } finally { sqlite3_close(db); }
+          }
+      }
+      '@
+      [PcsVsCodeState]::Get($db, 'sync.enable') -eq 'true'
 
   - id: firefox-hide-bookmarks-bar
     name: "Firefox: hide the bookmarks bar"
