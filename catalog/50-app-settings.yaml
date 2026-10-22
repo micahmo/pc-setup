@@ -47,10 +47,112 @@ items:
         value: never
 
   - id: firefox-settings
-    name: "Firefox: adjust the UI and apply settings"
+    name: "Firefox: apply settings"
+    description: Reopens your tabs, Backspace goes back, strict tracking protection, a bare new tab page, a home button, Google Images search, uBlock Origin, and more. Takes effect the next time Firefox starts.
     category: Firefox
     dependsOn: [firefox]
-    instructions: Set up the toolbar and settings the way you like them.
+    # Firefox policies for most of it. The preferences are defaults, not locks, so they can still be changed in
+    # Firefox, and a signed-in Firefox account syncs its own values over them. The one preference policies can't
+    # set (the delay on dialog buttons) goes in Firefox's own config file next to firefox.exe.
+    # Same values as the apply below.
+    detect: |
+      $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
+      $exeDir = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe' -ErrorAction SilentlyContinue).Path
+      if (-not $exeDir) { $exeDir = Join-Path $env:ProgramFiles 'Mozilla Firefox' }
+      $toolbar = [ordered]@{
+          placements = [ordered]@{ 'nav-bar' = @('back-button', 'forward-button', 'stop-reload-button', 'vertical-spacer', 'home-button',
+              'urlbar-container', 'unified-extensions-button', 'downloads-button', 'fxa-toolbar-menu-button') }
+          currentVersion = 28
+      } | ConvertTo-Json -Depth 5 -Compress
+      $prefs = [ordered]@{
+          'browser.startup.page'                                         = 3        # open previous windows and tabs
+          'browser.backspace_action'                                     = 0        # Backspace goes back
+          'browser.urlbar.autoFill.adaptiveHistory.enabled'              = $true    # autofill from history, like Chrome
+          'browser.formfill.enable'                                      = $false   # don't remember search and form history
+          'browser.contentblocking.category'                             = 'strict'
+          'signon.rememberSignons'                                       = $false   # no password saving; KeePassXC does that
+          'signon.generation.enabled'                                    = $false
+          'signon.management.page.breach-alerts.enabled'                 = $false
+          'browser.newtabpage.activity-stream.feeds.topsites'            = $false   # bare new tab page
+          'browser.newtabpage.activity-stream.feeds.section.topstories'  = $false
+          'browser.newtabpage.activity-stream.showSponsoredTopSites'     = $false
+          'browser.newtabpage.activity-stream.showWeather'               = $false
+          'browser.newtabpage.activity-stream.widgets.privacy.enabled'   = $false
+          'browser.newtabpage.activity-stream.widgets.sportsWidget.enabled' = $false
+          'browser.newtabpage.activity-stream.widgets.stocks.enabled'    = $false
+          'browser.uiCustomization.state'                                = $toolbar # home button, no flexible spaces
+      }
+      $p = [ordered]@{}; foreach ($k in $prefs.Keys) { $p[$k] = [ordered]@{ Value = $prefs[$k]; Status = 'default' } }
+      $want = @(
+          @{ Key = $ff; Name = 'Preferences'; Value = ($p | ConvertTo-Json -Depth 5 -Compress) }
+          @{ Key = $ff; Name = 'ShowHomeButton'; Value = 1 }
+          @{ Key = $ff; Name = 'ExtensionSettings'; Value = '{"uBlock0@raymondhill.net":{"installation_mode":"normal_installed","install_url":"https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"}}' }
+          @{ Key = "$ff\SearchEngines\Add\1"; Name = 'Name'; Value = 'Google Images' }
+          @{ Key = "$ff\SearchEngines\Add\1"; Name = 'URLTemplate'; Value = 'https://images.google.com/images?hl=en&source=hp&q={searchTerms}&btnG=Search+Images&gbv=2' }
+          @{ Key = "$ff\SearchEngines\Add\1"; Name = 'Alias'; Value = 'images' }
+      )
+      $i = 0; foreach ($n in 'Bing', 'DuckDuckGo', 'Perplexity', 'Wikipedia (en)', 'eBay', 'Amazon.com', 'Startpage') { $i++; $want += @{ Key = "$ff\SearchEngines\Remove"; Name = "$i"; Value = $n } }
+      foreach ($w in $want) {
+          $v = (Get-ItemProperty $w.Key -Name $w.Name -ErrorAction SilentlyContinue).($w.Name)
+          if ((@($v) -join "`n") -ne "$($w.Value)") { return $false }
+      }
+      $cfg = Join-Path $exeDir 'pcsetup.cfg'
+      (Test-Path (Join-Path $exeDir 'defaults\pref\pcsetup-autoconfig.js')) -and (Test-Path $cfg) -and
+          ((Get-Content $cfg -Raw) -match 'defaultPref\("security\.dialog_enable_delay", 0\)')
+    apply: |
+      $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
+      $exeDir = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe' -ErrorAction SilentlyContinue).Path
+      if (-not $exeDir) { $exeDir = Join-Path $env:ProgramFiles 'Mozilla Firefox' }
+      if (-not (Test-Path (Join-Path $exeDir 'firefox.exe'))) { throw "Firefox isn't installed where expected ($exeDir)." }
+      $toolbar = [ordered]@{
+          placements = [ordered]@{ 'nav-bar' = @('back-button', 'forward-button', 'stop-reload-button', 'vertical-spacer', 'home-button',
+              'urlbar-container', 'unified-extensions-button', 'downloads-button', 'fxa-toolbar-menu-button') }
+          currentVersion = 28
+      } | ConvertTo-Json -Depth 5 -Compress
+      $prefs = [ordered]@{
+          'browser.startup.page'                                         = 3
+          'browser.backspace_action'                                     = 0
+          'browser.urlbar.autoFill.adaptiveHistory.enabled'              = $true
+          'browser.formfill.enable'                                      = $false
+          'browser.contentblocking.category'                             = 'strict'
+          'signon.rememberSignons'                                       = $false
+          'signon.generation.enabled'                                    = $false
+          'signon.management.page.breach-alerts.enabled'                 = $false
+          'browser.newtabpage.activity-stream.feeds.topsites'            = $false
+          'browser.newtabpage.activity-stream.feeds.section.topstories'  = $false
+          'browser.newtabpage.activity-stream.showSponsoredTopSites'     = $false
+          'browser.newtabpage.activity-stream.showWeather'               = $false
+          'browser.newtabpage.activity-stream.widgets.privacy.enabled'   = $false
+          'browser.newtabpage.activity-stream.widgets.sportsWidget.enabled' = $false
+          'browser.newtabpage.activity-stream.widgets.stocks.enabled'    = $false
+          'browser.uiCustomization.state'                                = $toolbar
+      }
+      $p = [ordered]@{}; foreach ($k in $prefs.Keys) { $p[$k] = [ordered]@{ Value = $prefs[$k]; Status = 'default' } }
+      New-Item $ff -Force | Out-Null
+      Set-ItemProperty $ff -Name Preferences -Value @($p | ConvertTo-Json -Depth 5 -Compress) -Type MultiString
+      Set-ItemProperty $ff -Name ShowHomeButton -Value 1 -Type DWord
+      Set-ItemProperty $ff -Name ExtensionSettings -Type MultiString -Value @('{"uBlock0@raymondhill.net":{"installation_mode":"normal_installed","install_url":"https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"}}')
+
+      # Search: add Google Images, hide every built-in engine but Google. Remove is rewritten whole.
+      $add = "$ff\SearchEngines\Add\1"
+      New-Item $add -Force | Out-Null
+      Set-ItemProperty $add -Name Name -Value 'Google Images'
+      Set-ItemProperty $add -Name URLTemplate -Value 'https://images.google.com/images?hl=en&source=hp&q={searchTerms}&btnG=Search+Images&gbv=2'
+      Set-ItemProperty $add -Name Alias -Value 'images'
+      $remove = "$ff\SearchEngines\Remove"
+      if (Test-Path $remove) { Remove-Item $remove -Recurse -Force }
+      New-Item $remove -Force | Out-Null
+      $i = 0; foreach ($n in 'Bing', 'DuckDuckGo', 'Perplexity', 'Wikipedia (en)', 'eBay', 'Amazon.com', 'Startpage') { $i++; Set-ItemProperty $remove -Name "$i" -Value $n }
+
+      # No delay before dialog buttons work. Firefox reads every .js file in defaults\pref; this one points it at
+      # pcsetup.cfg, whose first line is skipped. defaultPref leaves it changeable in about:config.
+      $ascii = New-Object Text.ASCIIEncoding
+      [IO.File]::WriteAllText((Join-Path $exeDir 'defaults\pref\pcsetup-autoconfig.js'),
+          "// PC Setup: lets pcsetup.cfg set defaults that Firefox policies can't.`r`npref(`"general.config.filename`", `"pcsetup.cfg`");`r`npref(`"general.config.obscure_value`", 0);`r`n", $ascii)
+      [IO.File]::WriteAllText((Join-Path $exeDir 'pcsetup.cfg'),
+          "// PC Setup`r`ndefaultPref(`"security.dialog_enable_delay`", 0);`r`n", $ascii)
+
+      if (Get-Process firefox -ErrorAction SilentlyContinue) { Write-Output 'Firefox is open; these take effect the next time it starts.' }
 
   - id: keepassxc-settings
     name: "KeePassXC: settings and browser integration"
