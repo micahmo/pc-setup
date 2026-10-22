@@ -125,7 +125,8 @@ items:
           'browser.aboutwelcome.enabled'                                 = $false
       }
       $p = [ordered]@{}; foreach ($k in $prefs.Keys) { $p[$k] = [ordered]@{ Value = $prefs[$k]; Status = 'default' } }
-      New-Item $ff -Force | Out-Null
+      # Only create the key: New-Item -Force on an existing key wipes it, and other policies may live there.
+      if (-not (Test-Path $ff)) { New-Item $ff -Force | Out-Null }
       Set-ItemProperty $ff -Name Preferences -Value @($p | ConvertTo-Json -Depth 5 -Compress) -Type MultiString
       Set-ItemProperty $ff -Name ShowHomeButton -Value 1 -Type DWord
       Set-ItemProperty $ff -Name DisplayBookmarksToolbar -Value 'never' -Type String
