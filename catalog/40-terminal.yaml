@@ -58,6 +58,8 @@ items:
   - id: powershell-modules
     name: Install PowerShell modules
     description: posh-git, Terminal-Icons, and the latest PSReadLine.
+    # The newer PSReadLine loads through a script, so without the policy PowerShell starts without it.
+    dependsOn: [powershell-execution-policy]
     detect: |
       (Get-Module -ListAvailable posh-git) -and (Get-Module -ListAvailable Terminal-Icons) -and
       ((Get-Module -ListAvailable PSReadLine | Sort-Object Version -Descending | Select-Object -First 1).Version -ge [version]'2.3')
