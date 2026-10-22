@@ -38,9 +38,75 @@ items:
 
   - id: everything-settings
     name: "Everything: apply settings"
+    description: Starts with Windows, checks for updates, keeps search and run history, and sorts by newest first. Restarts Everything.
     category: Desktop apps
     dependsOn: [everything]
-    instructions: Set up its options the way you like them.
+    # Everything keeps its settings in Everything.ini, in AppData unless the copy next to the exe says otherwise.
+    # Only these keys are checked and written. Same values as the apply below.
+    detect: |
+      $exe = Join-Path $env:ProgramFiles 'Everything\Everything.exe'
+      $dir = Join-Path $env:APPDATA 'Everything'
+      if ((Get-Content (Join-Path (Split-Path $exe) 'Everything.ini') -ErrorAction SilentlyContinue) -contains 'app_data=0') { $dir = Split-Path $exe }
+      $ini = Join-Path $dir 'Everything.ini'
+      if (-not (Test-Path $ini)) { return $false }
+      $lines = Get-Content $ini -Encoding UTF8
+      $want = [ordered]@{
+          check_for_updates_on_startup = '1'
+          search_history_enabled       = '1'
+          run_history_enabled          = '1'
+          sort                         = 'Date Modified'
+          sort_ascending               = '0'
+      }
+      foreach ($k in $want.Keys) { if ($lines -notcontains "$k=$($want[$k])") { return $false } }
+      $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+      [bool](Get-ItemProperty $run -ErrorAction SilentlyContinue | Where-Object { $_.Everything })
+    apply: |
+      # The indexing service is also called Everything; it runs in session 0, the app in yours.
+      $running = @(Get-Process Everything -ErrorAction SilentlyContinue | Where-Object SessionId -ne 0)
+      $exe = if ($running.Count -gt 0) { $running[0].Path } else { Join-Path $env:ProgramFiles 'Everything\Everything.exe' }
+      $dir = Join-Path $env:APPDATA 'Everything'
+      if ((Get-Content (Join-Path (Split-Path $exe) 'Everything.ini') -ErrorAction SilentlyContinue) -contains 'app_data=0') { $dir = Split-Path $exe }
+      $ini = Join-Path $dir 'Everything.ini'
+
+      # Everything writes its settings when it exits, so let it exit cleanly first. The indexing service keeps running.
+      if ($running.Count -gt 0) {
+          Write-Output 'Closing Everything.'
+          & $exe -exit -wait
+          $running | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
+      }
+
+      $want = [ordered]@{
+          check_for_updates_on_startup = '1'
+          search_history_enabled       = '1'
+          run_history_enabled          = '1'
+          sort                         = 'Date Modified'
+          sort_ascending               = '0'
+      }
+      New-Item -ItemType Directory -Force $dir | Out-Null
+      $lines = New-Object Collections.Generic.List[string]
+      if (Test-Path $ini) { $lines.AddRange([string[]](Get-Content $ini -Encoding UTF8)) }
+      if (-not $lines.Contains('[Everything]')) { $lines.Add('[Everything]') }
+      foreach ($k in $want.Keys) {
+          $i = $lines.FindIndex({ param($l) $l.StartsWith("$k=") })
+          if ($i -ge 0) { $lines[$i] = "$k=$($want[$k])" }
+          else { $lines.Insert($lines.IndexOf('[Everything]') + 1, "$k=$($want[$k])") }
+      }
+      [IO.File]::WriteAllLines($ini, $lines, (New-Object Text.UTF8Encoding $false))
+
+      # The same startup entry Everything's own "Start Everything on system startup" option writes.
+      $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+      if (-not (Get-ItemProperty $run -ErrorAction SilentlyContinue | Where-Object { $_.Everything })) {
+          Set-ItemProperty $run[0] -Name Everything -Value "`"$exe`" -startup"
+      }
+
+      # Start it in the tray through Explorer so it doesn't run as admin. Explorer can't pass arguments,
+      # so it opens a temporary shortcut that carries -startup.
+      $lnk = Join-Path $env:TEMP 'pcs-everything.lnk'
+      $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+      $sc.TargetPath = $exe; $sc.Arguments = '-startup'; $sc.Save()
+      Start-Process explorer.exe "`"$lnk`""
+      Start-Sleep -Seconds 5
+      Remove-Item $lnk -ErrorAction SilentlyContinue
 
   - id: sharex-settings
     name: "ShareX: apply settings"
