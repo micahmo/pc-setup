@@ -112,6 +112,24 @@ items:
       Start-Sleep -Seconds 5
       Remove-Item $lnk -ErrorAction SilentlyContinue
 
+  - id: ditto-settings
+    name: "Ditto: apply settings"
+    description: Keeps up to 500 copies and skips the message at startup.
+    category: Desktop apps
+    dependsOn: [ditto]
+    # Ditto reads these from the registry when it needs them, so no restart. Everything else in your notes is
+    # Ditto's default, and its installer already adds it to startup.
+    registry:
+      - path: HKCU\Software\Ditto
+        name: CheckForMaxEntries
+        value: 1
+      - path: HKCU\Software\Ditto
+        name: MaxEntries
+        value: 500
+      - path: HKCU\Software\Ditto
+        name: ShowStartupMessage
+        value: 0
+
   - id: sharex-settings
     name: "ShareX: apply settings"
     description: Light theme, Print Screen captures a region, a quick menu after each capture, no sounds, and more. Restarts ShareX.
