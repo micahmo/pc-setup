@@ -30,7 +30,13 @@ items:
 
   # Utilities
   - { id: system-informer, name: System Informer, category: Utilities, winget: WinsiderSS.SystemInformer }
-  - { id: sharex, name: ShareX, category: Utilities, winget: ShareX.ShareX }
+  - id: sharex
+    name: ShareX
+    category: Utilities
+    winget: ShareX.ShareX
+    # Only "start with Windows" and "Print Screen doesn't open the Snipping Tool"; no desktop, context menu,
+    # or Send to shortcuts. NORUN keeps the installer from starting ShareX as admin.
+    wingetArgs: '--override "/SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NORUN /TASKS=CreateStartupIcon,DisablePrintScreenKeyForSnippingTool"'
   - { id: nanazip, name: NanaZip, category: Utilities, winget: M2Team.NanaZip }
   - { id: rapidee, name: Rapid Environment Editor, category: Utilities, winget: OlegDanilov.RapidEnvironmentEditor }
   - { id: lockhunter, name: LockHunter, category: Utilities, winget: CrystalRich.LockHunter }

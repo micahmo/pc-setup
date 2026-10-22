@@ -42,6 +42,138 @@ items:
     dependsOn: [everything]
     instructions: Set up its options the way you like them.
 
+  - id: sharex-settings
+    name: "ShareX: apply settings"
+    description: Light theme, Print Screen captures a region, a quick menu after each capture, no sounds, and more. Restarts ShareX.
+    category: Desktop apps
+    dependsOn: [sharex]
+    # ShareX keeps its settings in JSON next to the screenshots. Only these values are checked and written;
+    # everything else in the files is left alone. A missing file gets just these values, and ShareX fills in
+    # its own defaults for the rest. Same values as the apply below.
+    detect: |
+      $dir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'ShareX'
+      $appFile = Join-Path $dir 'ApplicationConfig.json'
+      $hotFile = Join-Path $dir 'HotkeysConfig.json'
+      if (-not (Test-Path $appFile) -or -not (Test-Path $hotFile)) { return $false }
+      $a = Get-Content $appFile -Raw -Encoding UTF8 | ConvertFrom-Json
+      $h = Get-Content $hotFile -Raw -Encoding UTF8 | ConvertFrom-Json
+      function Get-Setting($obj, [string]$path) {
+          foreach ($p in $path.Split('.')) { if ($null -eq $obj) { return $null }; $obj = $obj.$p }
+          $obj
+      }
+      $want = [ordered]@{
+          'UseWhiteShareXIcon'                                                    = $true
+          'DefaultTaskSettings.AfterCaptureJob'                                   = 'ShowQuickTaskMenu'
+          'DefaultTaskSettings.GeneralSettings.PlaySoundAfterCapture'             = $false
+          'DefaultTaskSettings.GeneralSettings.PlaySoundAfterUpload'              = $false
+          'DefaultTaskSettings.GeneralSettings.ToastWindowDuration'               = 30
+          'DefaultTaskSettings.CaptureSettings.ShowCursor'                        = $false
+          'DefaultTaskSettings.CaptureSettings.CaptureTransparent'                = $true
+          'DefaultTaskSettings.CaptureSettings.GIFFPS'                            = 30
+          'DefaultTaskSettings.CaptureSettings.SurfaceOptions.ImageEditorStartMode' = 'Maximized'
+      }
+      foreach ($k in $want.Keys) {
+          $v = Get-Setting $a $k
+          if ($null -eq $v -or $v -ne $want[$k]) { return $false }
+      }
+      # Light is the second built-in theme; ShareX lists the themes once it has saved the file itself.
+      $theme = if ($a.Themes) { $a.Themes[[int]$a.SelectedTheme].Name } elseif ($a.SelectedTheme -eq 1) { 'Light' }
+      if ($theme -ne 'Light') { return $false }
+      $quick = if ($a.QuickTaskPresets) { @($a.QuickTaskPresets | ForEach-Object { "$($_.Name)|$($_.AfterCaptureTasks)" }) -join ';' }
+      if ($quick -ne '|AnnotateImage;|CopyImageToClipboard;Save image to file|SaveImageToFile, CopyFilePathToClipboard;OCR|DoOCR') { return $false }
+      $keys = @{}
+      foreach ($hk in @($h.Hotkeys)) { if ($hk.TaskSettings.Job -and -not $keys.ContainsKey($hk.TaskSettings.Job)) { $keys[$hk.TaskSettings.Job] = $hk.HotkeyInfo.Hotkey } }
+      if ($keys['RectangleRegion'] -ne 'PrintScreen' -or $keys['PrintScreen'] -ne 'PrintScreen, Control') { return $false }
+      (Get-ItemProperty 'HKCU:\Control Panel\Keyboard' -ErrorAction SilentlyContinue).PrintScreenKeyForSnippingEnabled -eq 0
+    apply: |
+      $dir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'ShareX'
+      $appFile = Join-Path $dir 'ApplicationConfig.json'
+      $hotFile = Join-Path $dir 'HotkeysConfig.json'
+      function Read-Config([string]$file) {
+          if (Test-Path $file) { Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json } else { [pscustomobject]@{} }
+      }
+      function Save-Config($obj, [string]$file) {
+          [IO.File]::WriteAllText($file, ($obj | ConvertTo-Json -Depth 100), (New-Object Text.UTF8Encoding $false))
+      }
+      function Set-Setting($obj, [string]$path, $value) {
+          $parts = $path.Split('.')
+          for ($i = 0; $i -lt $parts.Count - 1; $i++) {
+              if ($null -eq $obj.($parts[$i])) { $obj | Add-Member -NotePropertyName $parts[$i] -NotePropertyValue ([pscustomobject]@{}) -Force }
+              $obj = $obj.($parts[$i])
+          }
+          # Update in place when the key exists, so the file keeps its order.
+          if ($obj.PSObject.Properties[$parts[-1]]) { $obj.($parts[-1]) = $value }
+          else { $obj | Add-Member -NotePropertyName $parts[-1] -NotePropertyValue $value }
+      }
+
+      # ShareX writes its settings back when it exits, so close it first and start it again at the end.
+      $running = @(Get-Process ShareX -ErrorAction SilentlyContinue)
+      $exe = if ($running.Count -gt 0) { $running[0].Path } else { Join-Path $env:ProgramFiles 'ShareX\ShareX.exe' }
+      if ($running.Count -gt 0) {
+          Write-Output 'Closing ShareX.'
+          $running | Stop-Process -Force
+          $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+      }
+      New-Item -ItemType Directory -Force $dir | Out-Null
+
+      $a = Read-Config $appFile
+      $want = [ordered]@{
+          'UseWhiteShareXIcon'                                                    = $true
+          'DefaultTaskSettings.AfterCaptureJob'                                   = 'ShowQuickTaskMenu'
+          'DefaultTaskSettings.GeneralSettings.PlaySoundAfterCapture'             = $false
+          'DefaultTaskSettings.GeneralSettings.PlaySoundAfterUpload'              = $false
+          'DefaultTaskSettings.GeneralSettings.ToastWindowDuration'               = 30
+          'DefaultTaskSettings.CaptureSettings.ShowCursor'                        = $false
+          'DefaultTaskSettings.CaptureSettings.CaptureTransparent'                = $true
+          'DefaultTaskSettings.CaptureSettings.GIFFPS'                            = 30
+          'DefaultTaskSettings.CaptureSettings.SurfaceOptions.ImageEditorStartMode' = 'Maximized'
+      }
+      foreach ($k in $want.Keys) { Set-Setting $a $k $want[$k] }
+      $names = @(if ($a.Themes) { $a.Themes | ForEach-Object { $_.Name } })
+      $light = [array]::IndexOf($names, 'Light')
+      Set-Setting $a 'SelectedTheme' $(if ($light -ge 0) { $light } else { 1 })
+      # A preset without a name shows its task's name in the menu.
+      Set-Setting $a 'QuickTaskPresets' @(
+          [pscustomobject]@{ Name = $null; AfterCaptureTasks = 'AnnotateImage'; AfterUploadTasks = 'None' }
+          [pscustomobject]@{ Name = $null; AfterCaptureTasks = 'CopyImageToClipboard'; AfterUploadTasks = 'None' }
+          [pscustomobject]@{ Name = 'Save image to file'; AfterCaptureTasks = 'SaveImageToFile, CopyFilePathToClipboard'; AfterUploadTasks = 'None' }
+          [pscustomobject]@{ Name = 'OCR'; AfterCaptureTasks = 'DoOCR'; AfterUploadTasks = 'None' }
+      )
+      Save-Config $a $appFile
+
+      # Swap ShareX's first two defaults: Print Screen captures a region, Ctrl+Print Screen the whole screen.
+      $h = Read-Config $hotFile
+      function New-Hotkey([string]$job, [string]$key) {
+          [pscustomobject]@{ HotkeyInfo = [pscustomobject]@{ Hotkey = $key; Win = $false }; TaskSettings = [pscustomobject]@{ Description = ''; Job = $job } }
+      }
+      $hotkeys = New-Object Collections.ArrayList
+      if ($h.Hotkeys) { $hotkeys.AddRange(@($h.Hotkeys)) }
+      else {
+          # No file yet: start from ShareX's default list, which the swap below then adjusts.
+          $hotkeys.AddRange(@(
+              New-Hotkey 'RectangleRegion' 'PrintScreen, Control'
+              New-Hotkey 'PrintScreen' 'PrintScreen'
+              New-Hotkey 'ActiveWindow' 'PrintScreen, Alt'
+              New-Hotkey 'ScreenRecorder' 'PrintScreen, Shift'
+              New-Hotkey 'ScreenRecorderGIF' 'PrintScreen, Shift, Control'
+          ))
+      }
+      foreach ($swap in @(@('RectangleRegion', 'PrintScreen'), @('PrintScreen', 'PrintScreen, Control'))) {
+          $hk = $hotkeys | Where-Object { $_.TaskSettings.Job -eq $swap[0] } | Select-Object -First 1
+          if ($hk) { $hk.HotkeyInfo.Hotkey = $swap[1]; $hk.HotkeyInfo.Win = $false }
+          else { [void]$hotkeys.Add((New-Hotkey $swap[0] $swap[1])) }
+      }
+      Set-Setting $h 'Hotkeys' $hotkeys.ToArray()
+      Save-Config $h $hotFile
+
+      # Without this, Windows opens the Snipping Tool on Print Screen before ShareX sees it.
+      Set-ItemProperty 'HKCU:\Control Panel\Keyboard' -Name PrintScreenKeyForSnippingEnabled -Value 0 -Type DWord
+
+      # Start it through Explorer so it doesn't run as admin. The startup shortcut starts it in the tray.
+      $startup = Join-Path ([Environment]::GetFolderPath('Startup')) 'ShareX.lnk'
+      if (Test-Path $startup) { Start-Process explorer.exe "`"$startup`"" }
+      elseif (Test-Path $exe) { Start-Process explorer.exe "`"$exe`"" }
+
   - id: start11-groupy-settings
     name: "Start11 and Groupy: license and settings"
     category: Desktop apps
