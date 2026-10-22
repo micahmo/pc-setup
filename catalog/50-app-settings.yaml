@@ -268,17 +268,97 @@ items:
     dependsOn: [start11, groupy]
     instructions: Enter the licenses, then set them up the way you like them.
 
-  - id: powertoys-remaps
-    name: "PowerToys: Alt+F4 and Print Screen remaps"
+  - id: powertoys-settings
+    name: "PowerToys: only Keyboard Manager, with F4 and Insert remapped"
+    description: F4 acts as Alt+F4 and Insert as Print Screen. Every other PowerToys tool is turned off. Restarts PowerToys.
     category: Desktop apps
     dependsOn: [powertoys]
-    instructions: Set up the Alt+F4 and Print Screen shortcuts in Keyboard Manager.
-    # Ticks off once Keyboard Manager has any remaps. Tighten this once the exact remaps are written down.
+    # settings.json lists which tools are on; Keyboard Manager's remaps are in its default.json. Key codes are
+    # Windows virtual keys: 115 = F4, 164 = Left Alt, 45 = Insert, 44 = Print Screen. Same values as the apply below.
     detect: |
-      $f = "$env:LOCALAPPDATA\Microsoft\PowerToys\Keyboard Manager\default.json"
-      if (-not (Test-Path $f)) { return $false }
-      $km = Get-Content $f -Raw | ConvertFrom-Json
-      (($km.remapShortcuts.global | Measure-Object).Count + ($km.remapKeys.inProcess | Measure-Object).Count) -gt 0
+      $root = Join-Path $env:LOCALAPPDATA 'Microsoft\PowerToys'
+      $settingsFile = Join-Path $root 'settings.json'
+      $kbmFile = Join-Path $root 'Keyboard Manager\default.json'
+      if (-not (Test-Path $settingsFile) -or -not (Test-Path $kbmFile)) { return $false }
+      $enabled = (Get-Content $settingsFile -Raw -Encoding UTF8 | ConvertFrom-Json).enabled
+      if (-not $enabled -or $enabled.'Keyboard Manager' -ne $true) { return $false }
+      # Only the tools this version lists; PowerToys writes the full list once it has run.
+      if ($enabled.PSObject.Properties | Where-Object { $_.Name -ne 'Keyboard Manager' -and $_.Value -ne $false }) { return $false }
+      $keys = @{}
+      foreach ($r in @((Get-Content $kbmFile -Raw -Encoding UTF8 | ConvertFrom-Json).remapKeys.inProcess)) { if ($r) { $keys["$($r.originalKeys)"] = "$($r.newRemapKeys)" } }
+      $keys['115'] -eq '164;115' -and $keys['45'] -eq '44'
+    apply: |
+      $root = Join-Path $env:LOCALAPPDATA 'Microsoft\PowerToys'
+      $settingsFile = Join-Path $root 'settings.json'
+      $kbmDir = Join-Path $root 'Keyboard Manager'
+      $kbmFile = Join-Path $kbmDir 'default.json'
+      function Read-Json([string]$file) {
+          if (Test-Path $file) { Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json } else { [pscustomobject]@{} }
+      }
+      function Get-ToolCount($settings) {
+          if ($settings.enabled) { ($settings.enabled.PSObject.Properties | Measure-Object).Count } else { 0 }
+      }
+      function Save-Json($obj, [string]$file) {
+          [IO.File]::WriteAllText($file, ($obj | ConvertTo-Json -Depth 100 -Compress), (New-Object Text.UTF8Encoding $false))
+      }
+      function Set-Prop($obj, [string]$name, $value) {
+          if ($obj.PSObject.Properties[$name]) { $obj.$name = $value } else { $obj | Add-Member -NotePropertyName $name -NotePropertyValue $value }
+      }
+
+      $exe = @((Get-Process PowerToys -ErrorAction SilentlyContinue | Select-Object -First 1).Path,
+          (Join-Path $env:ProgramFiles 'PowerToys\PowerToys.exe'), (Join-Path $env:LOCALAPPDATA 'PowerToys\PowerToys.exe')) |
+          Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+      if (-not $exe) { throw "PowerToys isn't installed where expected." }
+      # Start it through Explorer so it doesn't run as admin.
+      function Start-PowerToys { Start-Process explorer.exe "`"$exe`"" }
+      # Its tools run as separate PowerToys.* processes that go with it.
+      function Stop-PowerToys {
+          if (Get-Process PowerToys -ErrorAction SilentlyContinue) {
+              Write-Output 'Closing PowerToys.'
+              Get-Process PowerToys, PowerToys.* -ErrorAction SilentlyContinue | Stop-Process -Force
+              Start-Sleep -Seconds 2
+          }
+      }
+
+      # PowerToys reads these files only when it starts (and may write them back), so close it first.
+      Stop-PowerToys
+      New-Item -ItemType Directory -Force $kbmDir | Out-Null
+
+      # The tool list isn't written here, since PowerToys keeps adding tools. If it hasn't run on this PC yet,
+      # start it once so it writes its own list, then close it again.
+      $s = Read-Json $settingsFile
+      if ((Get-ToolCount $s) -eq 0) {
+          Write-Output 'Starting PowerToys once so it lists its tools.'
+          Start-PowerToys
+          $deadline = (Get-Date).AddSeconds(90)
+          do {
+              Start-Sleep -Seconds 3
+              try { $s = Read-Json $settingsFile } catch { $s = [pscustomobject]@{} }  # may be mid-write
+          } until ((Get-ToolCount $s) -gt 0 -or (Get-Date) -gt $deadline)
+          Stop-PowerToys
+          if ((Get-ToolCount $s) -eq 0) { throw "PowerToys didn't list its tools. Open it once, then try again." }
+      }
+
+      # Turn off every tool it lists but Keyboard Manager.
+      foreach ($p in $s.enabled.PSObject.Properties) { $p.Value = ($p.Name -eq 'Keyboard Manager') }
+      Set-Prop $s.enabled 'Keyboard Manager' $true
+      Save-Json $s $settingsFile
+
+      # Add the two remaps, replacing any other remap of F4 or Insert; other remaps stay.
+      $k = Read-Json $kbmFile
+      if (-not $k.PSObject.Properties['remapKeys']) { Set-Prop $k 'remapKeys' ([pscustomobject]@{ inProcess = @() }) }
+      if (-not $k.PSObject.Properties['remapShortcuts']) { Set-Prop $k 'remapShortcuts' ([pscustomobject]@{ global = @(); appSpecific = @() }) }
+      $remaps = @(@($k.remapKeys.inProcess) | Where-Object { $_ -and "$($_.originalKeys)" -notin '115', '45' })
+      $remaps += [pscustomobject]@{ originalKeys = '115'; newRemapKeys = '164;115' }
+      $remaps += [pscustomobject]@{ originalKeys = '45'; newRemapKeys = '44' }
+      Set-Prop $k.remapKeys 'inProcess' $remaps
+      Save-Json $k $kbmFile
+      $kbmSettings = Join-Path $kbmDir 'settings.json'
+      if (-not (Test-Path $kbmSettings)) {
+          Save-Json ([pscustomobject]@{ properties = [pscustomobject]@{ activeConfiguration = @{ value = 'default' }; keyboardConfigurations = @{ value = @('default') } }; name = 'Keyboard Manager'; version = '1' }) $kbmSettings
+      }
+
+      Start-PowerToys
 
   - id: onenote-setup
     name: "OneNote: open notebooks and set the layout"
