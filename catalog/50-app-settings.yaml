@@ -264,7 +264,7 @@ items:
 
   - id: sharex-settings
     name: "ShareX: apply settings"
-    description: Light theme, Print Screen captures a region, a quick menu after each capture, no sounds, and more. Restarts ShareX.
+    description: Light theme, Print Screen captures a region, a quick menu after each capture, no sounds, window captures without the shadow, the modern editor, and more. Restarts ShareX.
     category: Utilities
     dependsOn: [sharex]
     # ShareX keeps its settings in JSON next to the screenshots. Only these values are checked and written;
@@ -289,8 +289,11 @@ items:
           'DefaultTaskSettings.GeneralSettings.ToastWindowDuration'               = 30
           'DefaultTaskSettings.CaptureSettings.ShowCursor'                        = $false
           'DefaultTaskSettings.CaptureSettings.CaptureTransparent'                = $true
+          'DefaultTaskSettings.CaptureSettings.CaptureShadow'                     = $false
           'DefaultTaskSettings.CaptureSettings.GIFFPS'                            = 30
           'DefaultTaskSettings.CaptureSettings.SurfaceOptions.ImageEditorStartMode' = 'Maximized'
+          'DefaultTaskSettings.ToolsSettings.UseLegacyImageEditor'                = $false
+          'DefaultTaskSettings.ToolsSettings.ShowImageEditorSelector'             = $false
       }
       foreach ($k in $want.Keys) {
           $v = Get-Setting $a $k
@@ -330,9 +333,17 @@ items:
       $running = @(Get-Process ShareX -ErrorAction SilentlyContinue)
       $exe = if ($running.Count -gt 0) { $running[0].Path } else { Join-Path $env:ProgramFiles 'ShareX\ShareX.exe' }
       if ($running.Count -gt 0) {
+          # Ask it to exit the way its own Exit does, so it saves what it only has in memory (like a just-picked
+          # editor); close it by force only if it doesn't.
           Write-Output 'Closing ShareX.'
-          $running | Stop-Process -Force
-          $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+          Start-Process $exe -ArgumentList '-ExitShareX'
+          $running | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
+          $left = @($running | Where-Object { -not $_.HasExited })
+          if ($left.Count -gt 0) {
+              Write-Output "ShareX didn't exit; closing it."
+              $left | Stop-Process -Force
+              $left | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+          }
       }
       New-Item -ItemType Directory -Force $dir | Out-Null
 
@@ -345,8 +356,11 @@ items:
           'DefaultTaskSettings.GeneralSettings.ToastWindowDuration'               = 30
           'DefaultTaskSettings.CaptureSettings.ShowCursor'                        = $false
           'DefaultTaskSettings.CaptureSettings.CaptureTransparent'                = $true
+          'DefaultTaskSettings.CaptureSettings.CaptureShadow'                     = $false
           'DefaultTaskSettings.CaptureSettings.GIFFPS'                            = 30
           'DefaultTaskSettings.CaptureSettings.SurfaceOptions.ImageEditorStartMode' = 'Maximized'
+          'DefaultTaskSettings.ToolsSettings.UseLegacyImageEditor'                = $false
+          'DefaultTaskSettings.ToolsSettings.ShowImageEditorSelector'             = $false
       }
       foreach ($k in $want.Keys) { Set-Setting $a $k $want[$k] }
       $names = @(if ($a.Themes) { $a.Themes | ForEach-Object { $_.Name } })
