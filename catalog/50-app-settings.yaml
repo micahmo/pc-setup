@@ -55,7 +55,6 @@ items:
           currentVersion = 28
       } | ConvertTo-Json -Depth 5 -Compress
       $prefs = [ordered]@{
-          'browser.startup.page'                                         = 3        # open previous windows and tabs
           'browser.backspace_action'                                     = 0        # Backspace goes back
           'browser.urlbar.autoFill.adaptiveHistory.enabled'              = $true    # autofill from history, like Chrome
           'browser.formfill.enable'                                      = $false   # don't remember search and form history
@@ -78,6 +77,8 @@ items:
           @{ Key = $ff; Name = 'Preferences'; Value = ($p | ConvertTo-Json -Depth 5 -Compress) }
           @{ Key = $ff; Name = 'ShowHomeButton'; Value = 1 }
           @{ Key = $ff; Name = 'DisplayBookmarksToolbar'; Value = 'never' }
+          @{ Key = "$ff\Homepage"; Name = 'StartPage'; Value = 'previous-session' }   # reopen your tabs
+          @{ Key = "$ff\Homepage"; Name = 'Locked'; Value = 0 }
           @{ Key = $ff; Name = 'OverrideFirstRunPage'; Value = '' }
           @{ Key = $ff; Name = 'OverridePostUpdatePage'; Value = '' }
           @{ Key = $ff; Name = 'ExtensionSettings'; Value = '{"uBlock0@raymondhill.net":{"installation_mode":"normal_installed","default_area":"menupanel","install_url":"https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"}}' }
@@ -106,7 +107,6 @@ items:
           currentVersion = 28
       } | ConvertTo-Json -Depth 5 -Compress
       $prefs = [ordered]@{
-          'browser.startup.page'                                         = 3
           'browser.backspace_action'                                     = 0
           'browser.urlbar.autoFill.adaptiveHistory.enabled'              = $true
           'browser.formfill.enable'                                      = $false
@@ -130,6 +130,10 @@ items:
       Set-ItemProperty $ff -Name Preferences -Value @($p | ConvertTo-Json -Depth 5 -Compress) -Type MultiString
       Set-ItemProperty $ff -Name ShowHomeButton -Value 1 -Type DWord
       Set-ItemProperty $ff -Name DisplayBookmarksToolbar -Value 'never' -Type String
+      # Reopen your windows and tabs. Firefox decides this before policy preferences load, so it needs its own policy.
+      if (-not (Test-Path "$ff\Homepage")) { New-Item "$ff\Homepage" -Force | Out-Null }
+      Set-ItemProperty "$ff\Homepage" -Name StartPage -Value 'previous-session' -Type String
+      Set-ItemProperty "$ff\Homepage" -Name Locked -Value 0 -Type DWord
       # No welcome or what's-new pages; an empty value means none.
       Set-ItemProperty $ff -Name OverrideFirstRunPage -Value '' -Type String
       Set-ItemProperty $ff -Name OverridePostUpdatePage -Value '' -Type String
