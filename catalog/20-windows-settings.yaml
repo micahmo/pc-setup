@@ -353,15 +353,21 @@ items:
     name: Allow remote access
     description: Remote Desktop, ping, file sharing, and PowerShell remoting. The network needs to be set to Private.
     category: Network
+    # Windows' own ping rules only answer the local subnet, so pings over a VPN or Tailscale go unanswered.
+    # The PC Setup ping rules answer from anywhere.
     detect: |
       (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server').fDenyTSConnections -eq 0 -and
-      (Get-Service WinRM).Status -eq 'Running'
+      (Get-Service WinRM).Status -eq 'Running' -and
+      @(Get-NetFirewallRule -Name 'PCSetup-Ping-v4', 'PCSetup-Ping-v6' -ErrorAction SilentlyContinue | Where-Object Enabled -eq 'True').Count -eq 2
     apply: |
       Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
       Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
-      Enable-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv4-In)'
-      Enable-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv6-In)'
       Enable-NetFirewallRule -DisplayGroup 'File and Printer Sharing'
+      foreach ($r in @(@{ Name = 'PCSetup-Ping-v4'; Protocol = 'ICMPv4'; Type = '8' }, @{ Name = 'PCSetup-Ping-v6'; Protocol = 'ICMPv6'; Type = '128' })) {
+          Remove-NetFirewallRule -Name $r.Name -ErrorAction SilentlyContinue
+          New-NetFirewallRule -Name $r.Name -DisplayName "Answer ping, $($r.Protocol) (PC Setup)" -Direction Inbound -Action Allow `
+              -Protocol $r.Protocol -IcmpType $r.Type -Profile Any -RemoteAddress Any | Out-Null
+      }
       winrm quickconfig -force
       Enable-NetFirewallRule -DisplayGroup 'Windows Remote Management'
 
