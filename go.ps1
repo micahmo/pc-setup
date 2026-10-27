@@ -1,5 +1,6 @@
 # PC Setup bootstrap. Run from any PowerShell window:
-#   irm https://raw.githubusercontent.com/micahmo/pc-setup/main/go.ps1 | iex
+#   irm pc.micahmo.com | iex
+# (pc.micahmo.com redirects to https://raw.githubusercontent.com/micahmo/pc-setup/main/go.ps1.)
 # Downloads the latest release, replaces any older copy, and starts it. Safe to run any number of times.
 
 $ErrorActionPreference = 'Stop'

@@ -13,6 +13,12 @@ A Windows app that steps through setting up a PC: Windows settings, silent app i
 From any PowerShell window:
 
 ```powershell
+irm pc.micahmo.com | iex
+```
+
+`pc.micahmo.com` redirects to the script in this repo; the full address works too:
+
+```powershell
 irm https://raw.githubusercontent.com/micahmo/pc-setup/main/go.ps1 | iex
 ```
 
