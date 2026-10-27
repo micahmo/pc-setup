@@ -11,6 +11,9 @@ items:
       -not ((winget upgrade --accept-source-agreements --disable-interactivity) -match 'Microsoft\.WindowsTerminal\s')
     apply: |
       winget upgrade --id Microsoft.WindowsTerminal -e --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
+      # With Terminal open, winget keeps listing the update for a few seconds after installing it.
+      $deadline = (Get-Date).AddSeconds(30)
+      while ((Get-Date) -lt $deadline -and ((winget upgrade --accept-source-agreements --disable-interactivity) -match 'Microsoft\.WindowsTerminal\s')) { Start-Sleep -Seconds 3 }
 
   - id: windows-terminal-settings
     name: "Windows Terminal: apply settings"
