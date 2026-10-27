@@ -12,6 +12,45 @@ items:
     apply: |
       winget upgrade --id Microsoft.WindowsTerminal -e --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
 
+  - id: windows-terminal-settings
+    name: "Windows Terminal: apply settings"
+    description: Opens maximized, uses the Consolas font, and the One Half Dark colors for Windows PowerShell.
+    category: Windows Terminal
+    dependsOn: [windows-terminal]
+    # Only these values are checked and written; everything else in settings.json (including the profiles Terminal
+    # generates for WSL, Visual Studio and so on) is left alone. Terminal reloads the file on its own.
+    # Same values as the apply below.
+    detect: |
+      $f = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+      if (-not (Test-Path $f)) { return $false }
+      $s = Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json
+      $ps = @($s.profiles.list) | Where-Object { $_.guid -eq '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}' } | Select-Object -First 1
+      $s.launchMode -eq 'maximized' -and $s.profiles.defaults.font.face -eq 'Consolas' -and $ps.colorScheme -eq 'One Half Dark'
+    apply: |
+      $f = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+      function Set-Prop($obj, [string]$name, $value) {
+          if ($obj.PSObject.Properties[$name]) { $obj.$name = $value } else { $obj | Add-Member -NotePropertyName $name -NotePropertyValue $value }
+      }
+      if (Test-Path $f) {
+          try { $s = Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json }
+          catch { throw "Couldn't read Terminal's settings.json (comments in it can cause this): $($_.Exception.Message)" }
+      } else {
+          # Terminal hasn't run yet; it fills in everything else on first start.
+          New-Item -ItemType Directory -Force (Split-Path $f) | Out-Null
+          $s = [pscustomobject]@{ '$schema' = 'https://aka.ms/terminal-profiles-schema' }
+      }
+      Set-Prop $s 'launchMode' 'maximized'
+      if (-not $s.profiles) { Set-Prop $s 'profiles' ([pscustomobject]@{}) }
+      if (-not $s.profiles.defaults) { Set-Prop $s.profiles 'defaults' ([pscustomobject]@{}) }
+      if (-not $s.profiles.defaults.font) { Set-Prop $s.profiles.defaults 'font' ([pscustomobject]@{}) }
+      Set-Prop $s.profiles.defaults.font 'face' 'Consolas'
+      $list = @($s.profiles.list | Where-Object { $_ })
+      $ps = $list | Where-Object { $_.guid -eq '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}' } | Select-Object -First 1
+      if (-not $ps) { $ps = [pscustomobject]@{ guid = '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}' }; $list += $ps }
+      Set-Prop $ps 'colorScheme' 'One Half Dark'
+      Set-Prop $s.profiles 'list' $list
+      [IO.File]::WriteAllText($f, ($s | ConvertTo-Json -Depth 32), (New-Object Text.UTF8Encoding $false))
+
   - id: terminal-settings-link
     name: Use your synced Terminal settings
     description: The current settings are backed up first.
