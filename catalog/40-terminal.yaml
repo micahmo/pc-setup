@@ -30,22 +30,108 @@ items:
       Remove-Item $s -Force -ErrorAction SilentlyContinue
       New-Item -ItemType SymbolicLink -Path $s -Target "$env:USERPROFILE\Syncthing\PowerShell\settings.json" | Out-Null
 
+  - id: powershell-profile-github
+    name: Use your PowerShell profile from GitHub
+    description: For PCs without Syncthing. The first PowerShell window signs in to GitHub if needed; after that it stays up to date on its own.
+    dependsOn: [gh, powershell-execution-policy]
+    # Writes a small loader into both profiles (Windows PowerShell and PowerShell 7). The loader runs the cached copy of
+    # your profile, refreshes it from the private repo in the background, and on a new PC signs in with gh the first
+    # time you open PowerShell yourself. A profile already linked to Syncthing is left alone.
+    detect: |
+      $docs = [Environment]::GetFolderPath('MyDocuments')
+      $synced = Join-Path $env:USERPROFILE 'Syncthing\PowerShell\Microsoft.PowerShell_profile.ps1'
+      -not ('WindowsPowerShell', 'PowerShell' | Where-Object {
+          $p = Join-Path $docs "$_\Microsoft.PowerShell_profile.ps1"
+          $i = Get-Item $p -ErrorAction SilentlyContinue
+          -not (($i.LinkType -eq 'SymbolicLink' -and $i.Target -eq $synced) -or
+                ($i -and (Get-Content $p -TotalCount 1) -eq '# PC Setup profile loader v1'))
+      })
+    apply: |
+      $loader = @'
+      # PC Setup profile loader v1
+      # Loads your PowerShell profile from GitHub (micahmo/powershell-profile). The cached copy loads right away and a
+      # fresh one is fetched in the background for the next window. On a new PC, the first window signs in to GitHub.
+      $pcsProfile = Join-Path $env:LOCALAPPDATA 'PCSetup\profile\Microsoft.PowerShell_profile.ps1'
+      $pcsFetch = {
+          param($target)
+          $b64 = gh api repos/micahmo/powershell-profile/contents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1 --jq .content 2>$null
+          if ($LASTEXITCODE -ne 0 -or -not $b64) { return $false }
+          New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+          $tmp = "$target.$PID.tmp"
+          [IO.File]::WriteAllBytes($tmp, [Convert]::FromBase64String(($b64 -join '')))
+          Move-Item $tmp $target -Force -ErrorAction SilentlyContinue
+          Remove-Item $tmp -ErrorAction SilentlyContinue
+          return $true
+      }
+      if (Get-Command gh -ErrorAction SilentlyContinue) {
+          if (Test-Path $pcsProfile) {
+              # Refresh for the next window without slowing this one.
+              $pcsCmd = "& { $pcsFetch } '$pcsProfile'"
+              Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile', '-NonInteractive', '-EncodedCommand',
+                  ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($pcsCmd)))
+          } elseif ($Host.Name -eq 'ConsoleHost' -and [Environment]::UserInteractive -and -not ([Environment]::GetCommandLineArgs() -match '^-NonI')) {
+              # First window on this PC: sign in if needed, then download and use the profile.
+              gh auth status *> $null
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Host 'Signing in to GitHub to get your PowerShell profile...'
+                  gh auth login --hostname github.com --git-protocol https --web
+              }
+              if (-not (& $pcsFetch $pcsProfile)) { Write-Warning "Couldn't download your PowerShell profile from GitHub." }
+          }
+      }
+      if (Test-Path $pcsProfile) { . $pcsProfile }
+      Remove-Variable pcsProfile, pcsFetch, pcsCmd -ErrorAction SilentlyContinue
+      '@
+      $docs = [Environment]::GetFolderPath('MyDocuments')
+      $synced = Join-Path $env:USERPROFILE 'Syncthing\PowerShell\Microsoft.PowerShell_profile.ps1'
+      foreach ($folder in 'WindowsPowerShell', 'PowerShell') {
+          $p = Join-Path $docs "$folder\Microsoft.PowerShell_profile.ps1"
+          $i = Get-Item $p -ErrorAction SilentlyContinue
+          if ($i.LinkType -eq 'SymbolicLink' -and $i.Target -eq $synced) { Write-Output "$folder profile already uses Syncthing; leaving it."; continue }
+          if ($i -and $i.Length -gt 0 -and (Get-Content $p -TotalCount 1) -notlike '# PC Setup profile loader*') {
+              Copy-Item $p "$p.bak" -Force
+              Write-Output "Saved the existing $folder profile as $(Split-Path $p -Leaf).bak."
+          }
+          if ($i) { Remove-Item $p -Force }
+          New-Item -ItemType Directory -Force (Split-Path $p) | Out-Null
+          # UTF-8 with a BOM, so Windows PowerShell reads it right.
+          [IO.File]::WriteAllText($p, ($loader -replace "`r?`n", "`r`n") + "`r`n", (New-Object Text.UTF8Encoding $true))
+      }
+
   - id: powershell-profile-link
     name: Use your synced PowerShell profile
-    description: The current profile is backed up first.
+    description: Links both PowerShell profiles to the one in Syncthing. A profile you edited yourself is backed up first.
     dependsOn: [syncthing]
     requires:
       test: Test-Path "$env:USERPROFILE\Syncthing\PowerShell\Microsoft.PowerShell_profile.ps1"
       hint: Wait for Syncthing to sync the PowerShell folder, then retry.
     detect: |
-      $p = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Microsoft.PowerShell_profile.ps1'
-      (Get-Item $p -ErrorAction SilentlyContinue).LinkType -eq 'SymbolicLink'
+      $docs = [Environment]::GetFolderPath('MyDocuments')
+      $synced = Join-Path $env:USERPROFILE 'Syncthing\PowerShell\Microsoft.PowerShell_profile.ps1'
+      -not ('WindowsPowerShell', 'PowerShell' | Where-Object {
+          $i = Get-Item (Join-Path $docs "$_\Microsoft.PowerShell_profile.ps1") -ErrorAction SilentlyContinue
+          -not ($i.LinkType -eq 'SymbolicLink' -and $i.Target -eq $synced)
+      })
     apply: |
-      $p = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Microsoft.PowerShell_profile.ps1'
-      New-Item -ItemType Directory -Path (Split-Path $p) -Force | Out-Null
-      if (Test-Path $p) { Copy-Item $p "$p.bak" -Force }
-      Remove-Item $p -Force -ErrorAction SilentlyContinue
-      New-Item -ItemType SymbolicLink -Path $p -Target "$env:USERPROFILE\Syncthing\PowerShell\Microsoft.PowerShell_profile.ps1" | Out-Null
+      $docs = [Environment]::GetFolderPath('MyDocuments')
+      $synced = Join-Path $env:USERPROFILE 'Syncthing\PowerShell\Microsoft.PowerShell_profile.ps1'
+      foreach ($folder in 'WindowsPowerShell', 'PowerShell') {
+          $p = Join-Path $docs "$folder\Microsoft.PowerShell_profile.ps1"
+          $i = Get-Item $p -ErrorAction SilentlyContinue
+          if ($i.LinkType -eq 'SymbolicLink' -and $i.Target -eq $synced) { continue }
+          if ($i) {
+              # Back up only a profile you made: not the GitHub loader, a link, or a copy identical to the synced one.
+              $mine = $i.LinkType -eq $null -and $i.Length -gt 0 -and
+                  (Get-Content $p -TotalCount 1) -notlike '# PC Setup profile loader*' -and
+                  (Get-FileHash $p).Hash -ne (Get-FileHash $synced).Hash
+              if ($mine) { Copy-Item $p "$p.bak" -Force; Write-Output "Saved the existing $folder profile as $(Split-Path $p -Leaf).bak." }
+              Remove-Item $p -Force
+          }
+          New-Item -ItemType Directory -Force (Split-Path $p) | Out-Null
+          New-Item -ItemType SymbolicLink -Path $p -Target $synced | Out-Null
+      }
+      # The GitHub loader's cached copy isn't needed once Syncthing provides the profile.
+      Remove-Item (Join-Path $env:LOCALAPPDATA 'PCSetup\profile') -Recurse -Force -ErrorAction SilentlyContinue
 
   - id: powershell-execution-policy
     name: Let PowerShell run your own scripts
