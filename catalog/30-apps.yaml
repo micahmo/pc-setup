@@ -61,6 +61,7 @@ items:
   - { id: windows-terminal, name: Windows Terminal, category: Development, winget: Microsoft.WindowsTerminal }
   - { id: gh, name: GitHub CLI, category: Development, winget: GitHub.cli }
   - { id: kubectl, name: kubectl, category: Development, winget: Kubernetes.kubectl }
+  - { id: headlamp, name: Headlamp, description: A desktop app for your Kubernetes clusters., category: Development, winget: Headlamp.Headlamp }
   - { id: azure-cli, name: Azure CLI, category: Development, winget: Microsoft.AzureCLI }
   - { id: copilot-cli, name: Copilot CLI, category: Development, winget: GitHub.Copilot }
   - { id: chocolatey, name: Chocolatey, category: Development, winget: Chocolatey.Chocolatey }
