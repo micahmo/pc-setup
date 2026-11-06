@@ -268,7 +268,7 @@ items:
 
   - id: sharex-settings
     name: "ShareX: apply settings"
-    description: Light theme, Print Screen captures a region, a quick menu after each capture, no sounds, window captures without the shadow, the modern editor, and more. Restarts ShareX.
+    description: Print Screen captures a region, a quick menu after each capture, no sounds, window captures without the shadow, and more. Restarts ShareX.
     category: Utilities
     dependsOn: [sharex]
     # ShareX keeps its settings in JSON next to the screenshots. Only these values are checked and written;
@@ -295,17 +295,11 @@ items:
           'DefaultTaskSettings.CaptureSettings.CaptureTransparent'                = $true
           'DefaultTaskSettings.CaptureSettings.CaptureShadow'                     = $false
           'DefaultTaskSettings.CaptureSettings.GIFFPS'                            = 30
-          'DefaultTaskSettings.CaptureSettings.SurfaceOptions.ImageEditorStartMode' = 'Maximized'
-          'DefaultTaskSettings.ToolsSettings.UseLegacyImageEditor'                = $false
-          'DefaultTaskSettings.ToolsSettings.ShowImageEditorSelector'             = $false
       }
       foreach ($k in $want.Keys) {
           $v = Get-Setting $a $k
           if ($null -eq $v -or $v -ne $want[$k]) { return $false }
       }
-      # Light is the second built-in theme; ShareX lists the themes once it has saved the file itself.
-      $theme = if ($a.Themes) { $a.Themes[[int]$a.SelectedTheme].Name } elseif ($a.SelectedTheme -eq 1) { 'Light' }
-      if ($theme -ne 'Light') { return $false }
       $quick = if ($a.QuickTaskPresets) { @($a.QuickTaskPresets | ForEach-Object { "$($_.Name)|$($_.AfterCaptureTasks)" }) -join ';' }
       if ($quick -ne '|AnnotateImage;|CopyImageToClipboard;Save image to file|SaveImageToFile, CopyFilePathToClipboard;OCR|DoOCR') { return $false }
       $keys = @{}
@@ -362,14 +356,8 @@ items:
           'DefaultTaskSettings.CaptureSettings.CaptureTransparent'                = $true
           'DefaultTaskSettings.CaptureSettings.CaptureShadow'                     = $false
           'DefaultTaskSettings.CaptureSettings.GIFFPS'                            = 30
-          'DefaultTaskSettings.CaptureSettings.SurfaceOptions.ImageEditorStartMode' = 'Maximized'
-          'DefaultTaskSettings.ToolsSettings.UseLegacyImageEditor'                = $false
-          'DefaultTaskSettings.ToolsSettings.ShowImageEditorSelector'             = $false
       }
       foreach ($k in $want.Keys) { Set-Setting $a $k $want[$k] }
-      $names = @(if ($a.Themes) { $a.Themes | ForEach-Object { $_.Name } })
-      $light = [array]::IndexOf($names, 'Light')
-      Set-Setting $a 'SelectedTheme' $(if ($light -ge 0) { $light } else { 1 })
       # A preset without a name shows its task's name in the menu.
       Set-Setting $a 'QuickTaskPresets' @(
           [pscustomobject]@{ Name = $null; AfterCaptureTasks = 'AnnotateImage'; AfterUploadTasks = 'None' }
