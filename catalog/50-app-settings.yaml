@@ -154,11 +154,17 @@ items:
       # No delay before dialog buttons work, and Find (Ctrl+F) starts with Highlight All on; policies can't set
       # either. Firefox reads every .js file in defaults\pref; this one points it at pcsetup.cfg, whose first line
       # is skipped. defaultPref leaves them changeable in about:config.
+      # A downloaded update waits in a copy of the install folder ("updated") and replaces it on the next start,
+      # so write there too, or that start puts the old files back.
       $ascii = New-Object Text.ASCIIEncoding
-      [IO.File]::WriteAllText((Join-Path $exeDir 'defaults\pref\pcsetup-autoconfig.js'),
-          "// PC Setup: lets pcsetup.cfg set defaults that Firefox policies can't.`r`npref(`"general.config.filename`", `"pcsetup.cfg`");`r`npref(`"general.config.obscure_value`", 0);`r`n", $ascii)
-      [IO.File]::WriteAllText((Join-Path $exeDir 'pcsetup.cfg'),
-          "// PC Setup`r`ndefaultPref(`"security.dialog_enable_delay`", 0);`r`ndefaultPref(`"findbar.highlightAll`", true);`r`n", $ascii)
+      $dirs = @($exeDir)
+      if (Test-Path (Join-Path $exeDir 'updated\firefox.exe')) { $dirs += Join-Path $exeDir 'updated' }
+      foreach ($d in $dirs) {
+          [IO.File]::WriteAllText((Join-Path $d 'defaults\pref\pcsetup-autoconfig.js'),
+              "// PC Setup: lets pcsetup.cfg set defaults that Firefox policies can't.`r`npref(`"general.config.filename`", `"pcsetup.cfg`");`r`npref(`"general.config.obscure_value`", 0);`r`n", $ascii)
+          [IO.File]::WriteAllText((Join-Path $d 'pcsetup.cfg'),
+              "// PC Setup`r`ndefaultPref(`"security.dialog_enable_delay`", 0);`r`ndefaultPref(`"findbar.highlightAll`", true);`r`n", $ascii)
+      }
 
       if (Get-Process firefox -ErrorAction SilentlyContinue) { Write-Output 'Firefox is open; these take effect the next time it starts.' }
 
