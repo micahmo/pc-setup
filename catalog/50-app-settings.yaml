@@ -38,12 +38,12 @@ items:
 
   - id: firefox-settings
     name: "Firefox: apply settings"
-    description: Reopens your tabs, Backspace goes back, a bare new tab page, a home button, no bookmarks bar, Google Images search, uBlock Origin, and more. Firefox will say it's managed by your organization. Takes effect the next time Firefox starts.
+    description: Reopens your tabs, Backspace goes back, a bare new tab page, a home button, no bookmarks bar, Find highlights every match, Google Images search, uBlock Origin, and more. Firefox will say it's managed by your organization. Takes effect the next time Firefox starts.
     category: Browsers and productivity
     dependsOn: [firefox]
     # Firefox policies for most of it. The preferences are defaults, not locks, so they can still be changed in
-    # Firefox, and a signed-in Firefox account syncs its own values over them. The one preference policies can't
-    # set (the delay on dialog buttons) goes in Firefox's own config file next to firefox.exe.
+    # Firefox, and a signed-in Firefox account syncs its own values over them. The preferences policies can't
+    # set (the delay on dialog buttons, Highlight All) go in Firefox's own config file next to firefox.exe.
     # Same values as the apply below.
     detect: |
       $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
@@ -95,7 +95,8 @@ items:
       }
       $cfg = Join-Path $exeDir 'pcsetup.cfg'
       (Test-Path (Join-Path $exeDir 'defaults\pref\pcsetup-autoconfig.js')) -and (Test-Path $cfg) -and
-          ((Get-Content $cfg -Raw) -match 'defaultPref\("security\.dialog_enable_delay", 0\)')
+          ((Get-Content $cfg -Raw) -match 'defaultPref\("security\.dialog_enable_delay", 0\)') -and
+          ((Get-Content $cfg -Raw) -match 'defaultPref\("findbar\.highlightAll", true\)')
     apply: |
       $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
       $exeDir = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe' -ErrorAction SilentlyContinue).Path
@@ -150,13 +151,14 @@ items:
       New-Item $remove -Force | Out-Null
       $i = 0; foreach ($n in 'Bing', 'DuckDuckGo', 'Perplexity', 'Wikipedia (en)', 'eBay', 'Amazon.com', 'Startpage') { $i++; Set-ItemProperty $remove -Name "$i" -Value $n }
 
-      # No delay before dialog buttons work. Firefox reads every .js file in defaults\pref; this one points it at
-      # pcsetup.cfg, whose first line is skipped. defaultPref leaves it changeable in about:config.
+      # No delay before dialog buttons work, and Find (Ctrl+F) starts with Highlight All on; policies can't set
+      # either. Firefox reads every .js file in defaults\pref; this one points it at pcsetup.cfg, whose first line
+      # is skipped. defaultPref leaves them changeable in about:config.
       $ascii = New-Object Text.ASCIIEncoding
       [IO.File]::WriteAllText((Join-Path $exeDir 'defaults\pref\pcsetup-autoconfig.js'),
           "// PC Setup: lets pcsetup.cfg set defaults that Firefox policies can't.`r`npref(`"general.config.filename`", `"pcsetup.cfg`");`r`npref(`"general.config.obscure_value`", 0);`r`n", $ascii)
       [IO.File]::WriteAllText((Join-Path $exeDir 'pcsetup.cfg'),
-          "// PC Setup`r`ndefaultPref(`"security.dialog_enable_delay`", 0);`r`n", $ascii)
+          "// PC Setup`r`ndefaultPref(`"security.dialog_enable_delay`", 0);`r`ndefaultPref(`"findbar.highlightAll`", true);`r`n", $ascii)
 
       if (Get-Process firefox -ErrorAction SilentlyContinue) { Write-Output 'Firefox is open; these take effect the next time it starts.' }
 
