@@ -440,6 +440,8 @@ items:
           $v = (Get-ItemProperty "$base\$($w.Key)" -ErrorAction SilentlyContinue).($w.Name)
           if ($null -eq $v -or $v -ne $w.Value) { return $false }
       }
+      # Without a saved window position, MPC-BE turns RememberWindowPos back off when it starts (see the apply).
+      if ($null -eq (Get-ItemProperty "$base\Settings" -ErrorAction SilentlyContinue).LastWindowPos) { return $false }
       # Shortcuts: "command flags key ..." as MPC-BE saves them. Flags 11 = Alt, 1 = none; keys are hex virtual keys.
       $keys = @(
           '904 11 27 "" 5 0 0 0'     # Jump forward (large): Alt+Right
@@ -477,6 +479,11 @@ items:
           # Only create the key: New-Item -Force on an existing key wipes it.
           if (-not (Test-Path $k)) { New-Item $k -Force | Out-Null }
           Set-ItemProperty $k -Name $w.Name -Value $w.Value -Type DWord
+      }
+      # A fresh install has no saved window position, and MPC-BE then turns RememberWindowPos off at its first
+      # start. An off-screen position keeps it on; MPC-BE ignores it, opens centered, and saves the real one on close.
+      if ($null -eq (Get-ItemProperty "$base\Settings").LastWindowPos) {
+          Set-ItemProperty "$base\Settings" -Name LastWindowPos -Value '-32000;-32000' -Type String
       }
       # MPC-BE reads CommandMod0, 1, 2, ... in order, one per changed shortcut. Replace the entry for the same
       # command if there is one, otherwise add the next number.
