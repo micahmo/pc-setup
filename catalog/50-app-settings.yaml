@@ -410,7 +410,7 @@ items:
 
   - id: mpc-be-settings
     name: "MPC-BE: apply settings"
-    description: A new window for every file, resumes where you left off, seek bar previews and chapter marks, remembers its window, 30-second big jumps, YouTube at the best quality through yt-dlp, sharp subtitles, update checks, and shortcuts (F full screen, M mute, C subtitles, Alt+arrows jump).
+    description: Opens your videos, music, and playlists, a new window for every file, resumes where you left off, seek bar previews and chapter marks, remembers its window, 30-second big jumps, YouTube at the best quality through yt-dlp, sharp subtitles, update checks, and shortcuts (F full screen, M mute, C subtitles, Alt+arrows jump).
     category: Media
     dependsOn: [mpc-be]
     requires:
@@ -451,7 +451,10 @@ items:
       $cmds = Get-ItemProperty "$base\Commands2" -ErrorAction SilentlyContinue
       $have = @(if ($cmds) { $cmds.PSObject.Properties | Where-Object { $_.Name -like 'CommandMod*' } | ForEach-Object { $_.Value } })
       foreach ($k in $keys) { if ($have -notcontains $k) { return $false } }
-      $true
+      # Registered with Windows for video, audio, and playlist files, so it's offered in Open with.
+      $exe = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\mpc-be64.exe' -ErrorAction SilentlyContinue).'(default)'
+      $mp4 = (Get-ItemProperty 'HKLM:\SOFTWARE\Classes\mpc-be64.mp4\shell\open\command' -ErrorAction SilentlyContinue).'(default)'
+      $exe -and $mp4 -and $mp4 -like "*$exe*" -and (Get-ItemProperty 'HKLM:\SOFTWARE\RegisteredApplications' -ErrorAction SilentlyContinue).'MPC-BE'
     apply: |
       $base = 'HKCU:\Software\MPC-BE'
       $want = @(
@@ -493,6 +496,14 @@ items:
           $name = if ($same) { $same.Name } else { 'CommandMod' + ($props | Measure-Object).Count }
           Set-ItemProperty $k -Name $name -Value $cmd -Type String
       }
+
+      # Register for video, audio, and playlist files, as the installer's own checkboxes would (a silent install
+      # leaves them off). This also makes MPC-BE the default where Windows allows it; where you've picked
+      # defaults yourself, Windows keeps those, and MPC-BE is offered in Open with.
+      $exe = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\mpc-be64.exe' -ErrorAction SilentlyContinue).'(default)'
+      if (-not $exe -or -not (Test-Path $exe)) { throw "Couldn't find mpc-be64.exe." }
+      $p = Start-Process $exe -ArgumentList '/regvid', '/regaud', '/regpl' -PassThru -WindowStyle Hidden
+      if (-not $p.WaitForExit(60000)) { $p.Kill(); throw 'MPC-BE took too long to register its file types.' }
 
   - id: start11-groupy-settings
     name: "Start11 and Groupy: license and settings"
