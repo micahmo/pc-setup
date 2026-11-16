@@ -408,6 +408,92 @@ items:
       if (Test-Path $startup) { Start-Process explorer.exe "`"$startup`"" }
       elseif (Test-Path $exe) { Start-Process explorer.exe "`"$exe`"" }
 
+  - id: mpc-be-settings
+    name: "MPC-BE: apply settings"
+    description: A new window for every file, resumes where you left off, seek bar previews and chapter marks, remembers its window, 30-second big jumps, YouTube at the best quality through yt-dlp, sharp subtitles, update checks, and shortcuts (F full screen, M mute, C subtitles, Alt+arrows jump).
+    category: Media
+    dependsOn: [mpc-be]
+    requires:
+      test: -not (Get-Process mpc-be64, mpc-be -ErrorAction SilentlyContinue)
+      hint: Close MPC-BE, then retry. It saves its settings when it closes, which would undo these.
+    # MPC-BE keeps its settings in HKCU\Software\MPC-BE. Names and meanings are from MPC-BE 1.9.3's source
+    # (AppSettings.cpp, SettingsDefines.h); only values that differ from its defaults are set. Same values as
+    # the apply below.
+    detect: |
+      $base = 'HKCU:\Software\MPC-BE'
+      $want = @(
+          @{ Key = 'Settings'; Name = 'MultipleInstances'; Value = 2 }         # New process for every file
+          @{ Key = 'Settings'; Name = 'RememberFilePos'; Value = 1 }
+          @{ Key = 'Settings'; Name = 'UseSmartSeek'; Value = 1 }              # previews on the seek bar
+          @{ Key = 'Settings'; Name = 'ChapterMarker'; Value = 1 }
+          @{ Key = 'Settings'; Name = 'WindowModeStartup'; Value = 1 }         # remember last window size
+          @{ Key = 'Settings'; Name = 'RememberWindowPos'; Value = 1 }
+          @{ Key = 'Settings'; Name = 'JumpDistL'; Value = 30000 }             # large jump, in ms
+          @{ Key = 'Settings\Updater'; Name = 'UpdaterAutoCheck'; Value = 1 }
+          @{ Key = 'OnlineServices'; Name = 'YDLEnable'; Value = 1 }           # play YouTube links through yt-dlp
+          @{ Key = 'OnlineServices'; Name = 'YDLMaxHeight'; Value = 4320 }     # the highest choice
+          @{ Key = 'OnlineServices'; Name = 'YDLHighFps'; Value = 1 }
+          @{ Key = 'OnlineServices'; Name = 'YDLHighBitrate'; Value = 1 }
+          @{ Key = 'Video'; Name = 'SubpicMaxTexWidth'; Value = 0 }            # subtitles at screen resolution ("Desktop")
+      )
+      foreach ($w in $want) {
+          $v = (Get-ItemProperty "$base\$($w.Key)" -ErrorAction SilentlyContinue).($w.Name)
+          if ($null -eq $v -or $v -ne $w.Value) { return $false }
+      }
+      # Shortcuts: "command flags key ..." as MPC-BE saves them. Flags 11 = Alt, 1 = none; keys are hex virtual keys.
+      $keys = @(
+          '904 11 27 "" 5 0 0 0'     # Jump forward (large): Alt+Right
+          '903 11 25 "" 5 0 0 0'     # Jump backward (large): Alt+Left
+          '830 1 46 "" 5 3 0 3'      # Full screen: F (double-click still works)
+          '909 1 4d "" 5 0 0 0'      # Mute: M
+          '956 1 43 "" 5 0 0 0'      # Subtitles on/off: C
+      )
+      $cmds = Get-ItemProperty "$base\Commands2" -ErrorAction SilentlyContinue
+      $have = @(if ($cmds) { $cmds.PSObject.Properties | Where-Object { $_.Name -like 'CommandMod*' } | ForEach-Object { $_.Value } })
+      foreach ($k in $keys) { if ($have -notcontains $k) { return $false } }
+      $true
+    apply: |
+      $base = 'HKCU:\Software\MPC-BE'
+      $want = @(
+          @{ Key = 'Settings'; Name = 'MultipleInstances'; Value = 2 }
+          @{ Key = 'Settings'; Name = 'RememberFilePos'; Value = 1 }
+          @{ Key = 'Settings'; Name = 'UseSmartSeek'; Value = 1 }
+          @{ Key = 'Settings'; Name = 'ChapterMarker'; Value = 1 }
+          @{ Key = 'Settings'; Name = 'WindowModeStartup'; Value = 1 }
+          @{ Key = 'Settings'; Name = 'RememberWindowPos'; Value = 1 }
+          @{ Key = 'Settings'; Name = 'JumpDistL'; Value = 30000 }
+          @{ Key = 'Settings\Updater'; Name = 'UpdaterAutoCheck'; Value = 1 }
+          @{ Key = 'OnlineServices'; Name = 'YDLEnable'; Value = 1 }
+          @{ Key = 'OnlineServices'; Name = 'YDLMaxHeight'; Value = 4320 }
+          @{ Key = 'OnlineServices'; Name = 'YDLHighFps'; Value = 1 }
+          @{ Key = 'OnlineServices'; Name = 'YDLHighBitrate'; Value = 1 }
+          @{ Key = 'Video'; Name = 'SubpicMaxTexWidth'; Value = 0 }
+      )
+      foreach ($w in $want) {
+          $k = "$base\$($w.Key)"
+          # Only create the key: New-Item -Force on an existing key wipes it.
+          if (-not (Test-Path $k)) { New-Item $k -Force | Out-Null }
+          Set-ItemProperty $k -Name $w.Name -Value $w.Value -Type DWord
+      }
+      # MPC-BE reads CommandMod0, 1, 2, ... in order, one per changed shortcut. Replace the entry for the same
+      # command if there is one, otherwise add the next number.
+      $keys = @(
+          '904 11 27 "" 5 0 0 0'
+          '903 11 25 "" 5 0 0 0'
+          '830 1 46 "" 5 3 0 3'
+          '909 1 4d "" 5 0 0 0'
+          '956 1 43 "" 5 0 0 0'
+      )
+      $k = "$base\Commands2"
+      if (-not (Test-Path $k)) { New-Item $k -Force | Out-Null }
+      foreach ($cmd in $keys) {
+          $id = $cmd.Split(' ')[0]
+          $props = (Get-ItemProperty $k).PSObject.Properties | Where-Object { $_.Name -match '^CommandMod\d+$' }
+          $same = $props | Where-Object { "$($_.Value)".Split(' ')[0] -eq $id } | Select-Object -First 1
+          $name = if ($same) { $same.Name } else { 'CommandMod' + ($props | Measure-Object).Count }
+          Set-ItemProperty $k -Name $name -Value $cmd -Type String
+      }
+
   - id: start11-groupy-settings
     name: "Start11 and Groupy: license and settings"
     category: Desktop

@@ -45,6 +45,19 @@ items:
   - { id: klogg, name: klogg, category: Utilities, winget: variar.klogg }
   - { id: scrcpy-gui, name: Scrcpy GUI, description: Mirror and control your Android phone., category: Utilities, winget: pizi.scrcpygui }
 
+  # Media
+  - { id: mpc-be, name: MPC-BE, description: A video player with previews on the seek bar and fast seeking., category: Media, winget: MPC-BE.MPC-BE }
+  - id: yt-dlp
+    name: yt-dlp
+    description: Lets MPC-BE play YouTube and other web videos.
+    category: Media
+    winget: yt-dlp.yt-dlp
+    # Also counts a copy installed another way, such as with pip. PATH is read fresh from the registry, since
+    # winget adds yt-dlp to it during the run.
+    detect: |
+      $path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+      [bool]($path.Split(';') | Where-Object { $_ -and (Test-Path (Join-Path ([Environment]::ExpandEnvironmentVariables($_)) 'yt-dlp.exe')) })
+
   # Networking and sync
   - { id: tailscale, name: Tailscale, description: Set this up before Syncthing., category: Networking and sync, winget: Tailscale.Tailscale }
   - { id: syncthing, name: Syncthing, category: Networking and sync, winget: Syncthing.Syncthing, dependsOn: [tailscale] }
